@@ -2,7 +2,7 @@
 //*																													*
 //*   File:       UGSort.cpp																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.13.0	(Build: 14)																				*
+//*   Version:    1.14.0	(Build: 15)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -60,6 +60,8 @@
 //*	1.11.0 -	06/05/2023	-	Tail first final merge																*
 //*	1.12.0 -	06/05/2023	-	Revert Tail first final merge														*
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
+//*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
+//*							-	Corrected PM control parameters														*
 //*																													*
 //*******************************************************************************************************************/
 

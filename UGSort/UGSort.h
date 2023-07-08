@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       UGSort.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.13.0	(Build: 14)																				*
+//*   Version:    1.14.0	(Build: 15)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -61,6 +61,8 @@
 //*	1.11.0 -	06/05/2023	-	Tail first final merge																*
 //*	1.12.0 -	06/05/2023	-	Revert Tail first final merge														*
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
+//*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
+//*							-	Corrected PM control parameters														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -75,9 +77,9 @@
 #define		APP_NAME			"UGSort"
 #define		APP_TITLE			"UGSort Algorithm Testbed"
 #ifdef _DEBUG
-#define		APP_VERSION			"1.13.0 build: 14 Debug"
+#define		APP_VERSION			"1.14.0 build: 15 Debug"
 #else
-#define		APP_VERSION			"1.13.0 build: 14"
+#define		APP_VERSION			"1.14.0 build: 15"
 #endif
 
 //  Forward Declarations/ Function Prototypes

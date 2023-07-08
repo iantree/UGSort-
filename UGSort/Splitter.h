@@ -38,6 +38,8 @@
 //*	1.11.0 -	06/05/2023	-	Tail first final merge																*
 //*	1.12.0 -	06/05/2023	-	Revert Tail first final merge														*
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
+//*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
+//*							-	Corrected PM control parameters														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -366,8 +368,8 @@ public:
 		//  Initialise the Preemptive Merge controls
 		RecNo = 1;
 		StoreCount = 1;
-		MaxStores = 400;
-		MaxSInc = 75;
+		MaxStores = 100;
+		MaxSInc = 25;
 
 		//  Return to caller
 		return;
