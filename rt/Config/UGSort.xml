@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--- Application configuration for the UGSort testbed application -->
+<config app="UGSort">
+   <sort inmem="true" pm="enable">
+      <sortin>Data/SI250K.txt</sortin>
+      <sortout>Data/SO.txt</sortout>
+      <sortkey offset="0" length="20"></sortkey>
+   </sort>
+</config>
