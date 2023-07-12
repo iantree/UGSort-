@@ -360,7 +360,7 @@ public:
 	//  NOTES:
 	//
 
-	Splitter<T>(T& IRec, size_t KeyLen) : KL(KeyLen), CumPMTime(0) {
+	Splitter<T>(T& IRec, size_t KeyLen) : KL(KeyLen), CumPMTime(0), NumPMs(0), PMStoresMerged(0) {
 
 		//  Initialise the splitStore chain
 		pStore = new SplitStore<T>(IRec, KeyLen);
@@ -390,7 +390,7 @@ public:
 	//  NOTES:
 	//
 
-	Splitter<T>(T& IRec, size_t KeyLen, size_t KSASizeKB) : KL(KeyLen), CumPMTime(0) {
+	Splitter<T>(T& IRec, size_t KeyLen, size_t KSASizeKB) : KL(KeyLen), CumPMTime(0), NumPMs(0), PMStoresMerged(0) {
 
 		//  Initialise the splitstore chain
 		pStore = new SplitStore<T>(IRec, KeyLen, KSASizeKB);
@@ -399,10 +399,6 @@ public:
 		RecNo = 1;
 		StoreCount = 1;
 		MaxStores = 400;
-
-		//  Clear statistics
-		NumPMs = 0;
-		PMStoresMerged = 0;
 
 		//  Return to caller
 		return;
