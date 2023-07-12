@@ -381,7 +381,7 @@ public:
 	//
 	//  PARAMETERS:
 	//
-	//		T&				-		Reference to the initial record to be stored in the Soplitter
+	//		T&				-		Reference to the initial record to be stored in the Splitter
 	//		size_t			-		Sort Key Length
 	//		size_t			-		Keystore Arena Size in KB
 	//
@@ -398,7 +398,8 @@ public:
 		//  Initialise the Preemptive Merge controls
 		RecNo = 1;
 		StoreCount = 1;
-		MaxStores = 400;
+		MaxStores = 100;
+		MaxSInc = 25;
 
 		//  Return to caller
 		return;
