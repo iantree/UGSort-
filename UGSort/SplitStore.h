@@ -79,7 +79,7 @@ public:
 	//  NOTES:
 	//
 
-	SplitStore<T>(T& IRec, size_t KeyLen) : SRALo(0), SRAHi(0), SRANum(0), SRAInc(256), KL(KeyLen) {
+	SplitStore<T>(T& IRec, size_t KeyLen) : SRANum(0), SRAHi(0), SRALo(0), SRAInc(256), KL(KeyLen) {
 
 		//  No keystore is used
 		pKeyStore = nullptr;
@@ -118,7 +118,7 @@ public:
 	//  NOTES:
 	//
 
-	SplitStore<T>(T& IRec, size_t KeyLen, size_t KSASizeKB) : SRALo(0), SRAHi(0), SRANum(0), SRAInc(256), KL(KeyLen) {
+	SplitStore<T>(T& IRec, size_t KeyLen, size_t KSASizeKB) : SRANum(0), SRAHi(0), SRALo(0), SRAInc(256), KL(KeyLen) {
 
 		//  Initialise keystore 
 		ArenaSize = KSASizeKB * 1024;

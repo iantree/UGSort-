@@ -880,8 +880,6 @@ public:
 		xymorg::TIMER			EndMerge = xymorg::CLOCK::now();										//  End of sort merge phase
 		xymorg::TIMER			StartOut = xymorg::CLOCK::now();										//  Start of sort output phase
 		xymorg::TIMER			EndOut = xymorg::CLOCK::now();											//  End of sort output phase
-		xymorg::TIMER			StartPM = xymorg::CLOCK::now();											//  Start of preemptive merge
-		xymorg::TIMER			EndPM = xymorg::CLOCK::now();											//  End of preemptive merge
 
 		xymorg::MILLISECONDS	PhaseTime(0);															//  Phase duration
 		xymorg::MILLISECONDS	CumPMTime(0);															//  Cumulative preemptive merge time
