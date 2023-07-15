@@ -91,7 +91,7 @@ public:
 
 		//  Initialise the Sort Records Array (SRA)
 		SRASize = SRAInc;
-		pSRA = (T*)malloc(SRASize * sizeof(T));
+		pSRA = (T*) malloc(SRASize * sizeof(T));
 		if (pSRA == nullptr) return;
 
 		//  Copy the initial sort record to the mid-point in the array
@@ -123,7 +123,7 @@ public:
 		//  Initialise keystore 
 		ArenaSize = KSASizeKB * 1024;
 		if (ArenaSize < KeyLen) ArenaSize = 64 * 1024;
-		pLastArena = (Arena*)malloc(ArenaSize);
+		pLastArena = (Arena*) malloc(ArenaSize);
 		if (pLastArena == nullptr) return;
 		pKeyStore = pLastArena;
 
@@ -137,7 +137,7 @@ public:
 
 		//  Initialise the Sort Records Array (SRA)
 		SRASize = SRAInc;
-		pSRA = (T*)malloc(SRASize * sizeof(T));
+		pSRA = (T*) malloc(SRASize * sizeof(T));
 		if (pSRA == nullptr) return;
 
 		//  Copy the initial sort record to the mid-point in the array

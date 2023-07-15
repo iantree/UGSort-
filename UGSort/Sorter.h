@@ -380,7 +380,7 @@ public:
 			PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
 			Log << "INFO: Sort for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
 			PhaseTime = DURATION(xymorg::MILLISECONDS, EndStore - StartStore);
-			Log << "INFO: Input data was stored from memory to disk in: " << PhaseTime.count() << " milliseconds." << std::endl;
+			Log << "INFO: Output data was stored from memory to disk in: " << PhaseTime.count() << " milliseconds." << std::endl;
 		}
 
 		//  Return showing success
@@ -825,7 +825,7 @@ public:
 			PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
 			Log << "INFO: Sort for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
 			PhaseTime = DURATION(xymorg::MILLISECONDS, EndStore - StartStore);
-			Log << "INFO: Input data was stored from memory to disk in: " << PhaseTime.count() << " milliseconds." << std::endl;
+			Log << "INFO: Output data was stored from memory to disk in: " << PhaseTime.count() << " milliseconds." << std::endl;
 		}
 
 		//  Return showing success
@@ -1125,7 +1125,7 @@ private:
 
 		//  Allocate a buffer to hold the file contents
 		//  3 additional bytes are allocated one for EOS (\0) and two for a possible cr/lf insert
-		pFImg = (char*)malloc(FSize + 3);
+		pFImg = (char*) malloc(FSize + 3);
 		if (pFImg == nullptr) {
 			fclose(pRFile);
 			Log << "ERROR: Failed to allocate: " << FSize << " bytes to hold the sort input." << std::endl;
