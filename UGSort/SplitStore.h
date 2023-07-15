@@ -46,15 +46,15 @@ class SplitStore {
 private:
 	//*******************************************************************************************************************
 	//*                                                                                                                 *
-	//*   Private Nested Structures                                                                                      *
+	//*   Private Nested Structures                                                                                     *
 	//*                                                                                                                 *
 	//*******************************************************************************************************************
 
 	//  Arena (header) structure for keystore implementation
 	typedef struct Arena {
-		Arena* pNext;																//  Pointer to the next arena
+		Arena*		pNext;																//  Pointer to the next arena
 		size_t		FreeSpace;															//  Size of free space remaining in the arena
-		char* pKey;																//  Pointer to the next key to store
+		char*		pKey;																//  Pointer to the next key to store
 	} Arena;
 
 public:
