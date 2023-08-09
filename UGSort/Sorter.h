@@ -561,7 +561,7 @@ public:
 		}
 		else {
 			//  Descending sort sequence
-			for (Splitter<ODSR>::Output O = pSR->highest(); O <= pSR->lowest(); O--) {
+			for (Splitter<ODSR>::Output O = pSR->highest(); O >= pSR->lowest(); O--) {
 				//  Position sortin to the record
 				Sortin.seekg((*O).RecPos);
 				//  Read the record
@@ -1006,7 +1006,7 @@ public:
 		}
 		else {
 			//  Descending sort sequence
-			for (Splitter<ODSR>::Output O = pSR->highest(); O <= pSR->lowest(); O--) {
+			for (Splitter<ODSR>::Output O = pSR->highest(); O >= pSR->lowest(); O--) {
 				//  Position sortin to the record
 				Sortin.seekg((*O).RecPos);
 				//  Read the record
