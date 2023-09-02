@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       Sorter.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.14.0	(Build: 15)																				*
+//*   Version:    1.15.0	(Build: 16)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -33,6 +33,7 @@
 //*	1.6.0 -		15/03/2023	-	Stable Key Handling																	*
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
 //*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
+//*	1.15.0 -	25/08/2023	-	Binary-Chop search of Store Chain													*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -40,6 +41,7 @@
 #include	"../xymorg/xymorg.h"															//  xymorg system headers
 
 //  Application Headers
+#include	"IStats.h"																		//  Instrumentation
 #include	"Splitter.h"																	//  Splitter template class
 
 //
@@ -192,47 +194,31 @@ public:
 		size_t SKLen,
 		bool Ascending,
 		bool PMEnabled) {
+
 		char*					pSortin = nullptr;														//  Sort input in-memory buffer
 		char*					pSortout = nullptr;														//  Sort output in-memory buffer
 		size_t					SISize = 0;																//  Sort input size
 		char*					pEOI = nullptr;															//  Pointer to the End-Of-Input
 		char*					pNextRec = nullptr;														//  Pointer to the next record
 		IMSR					SRec = {};																//  In-Memory sort record (internal)
-		size_t					SortRecs = 0;															//  Count of records sorted
 
 		//  Root Splitter of the Splitter chain
-		Splitter<IMSR>*			pSR = nullptr;
+		Splitter<IMSR>* pSR = nullptr;
 
-		//  Timing and metrics elements
-		xymorg::TIMER			StartLoad = xymorg::CLOCK::now();										//  Start loading data file
-		xymorg::TIMER			EndLoad = xymorg::CLOCK::now();											//  End loading data file
-		xymorg::TIMER			StartSort = xymorg::CLOCK::now();										//  Start Sort
-		xymorg::TIMER			EndSort = xymorg::CLOCK::now();											//  End Sort
-		xymorg::TIMER			StartInput = xymorg::CLOCK::now();										//  Start of sort input phase
-		xymorg::TIMER			EndInput = xymorg::CLOCK::now();										//  End of sort input phase
-		xymorg::TIMER			StartMerge = xymorg::CLOCK::now();										//  Start of sort merge phase
-		xymorg::TIMER			EndMerge = xymorg::CLOCK::now();										//  End of sort merge phase
-		xymorg::TIMER			StartOut = xymorg::CLOCK::now();										//  Start of sort output phase
-		xymorg::TIMER			EndOut = xymorg::CLOCK::now();											//  End of sort output phase
-		xymorg::TIMER			StartStore = xymorg::CLOCK::now();										//  Start storing data file
-		xymorg::TIMER			EndStore = xymorg::CLOCK::now();										//  End storing data file
-
-		xymorg::MILLISECONDS	PhaseTime(0);															//  Phase duration
-		xymorg::MILLISECONDS	CumPMTime(0);															//  Cumulative preemptive merge time
-		size_t					NumPMs = 0;																//  Count of preemptive merges
-		size_t					PMStoresMerged = 0;														//  Count of stores merged by PM
+		//  Instrumentation Statistics Object
+		IStats					Stats;
 
 		//  Load the designated sort input into memory
-		StartLoad = xymorg::CLOCK::now();
+		Stats.startLoading();
 		pSortin = loadSortInput(SFIn, SISize);
 		if (pSortin == nullptr) {
 			Log << "ERROR: Failed to load the sort input into memory, it may be too big to sort in-memory." << std::endl;
 			return false;
 		}
-		EndLoad = xymorg::CLOCK::now();
+		Stats.finishLoading();
 
 		//  The sort timing starts once the data has been loaded
-		StartSort = xymorg::CLOCK::now();
+		Stats.startSorting();
 
 		pEOI = pSortin + SISize;
 		pNextRec = pSortin;																				//  Next record is the first
@@ -247,7 +233,7 @@ public:
 		else pNextRec++;
 
 		//  Create the Root Splitter
-		pSR = new Splitter<IMSR>(SRec, SKLen);
+		pSR = new Splitter<IMSR>(SRec, SKLen, Stats);
 		if (pSR == nullptr) {
 			Log << "ERROR: Unable to create the root Splitter to perform the sort." << std::endl;
 			return false;
@@ -257,7 +243,7 @@ public:
 		//  Sort Input phase - load each record to the root splitter
 		//
 
-		StartInput = xymorg::CLOCK::now();
+		Stats.startInput();
 
 		//  Process each record in turn
 		while (pNextRec < pEOI) {
@@ -273,7 +259,7 @@ public:
 		}
 
 		//  Record the ending time
-		EndInput = xymorg::CLOCK::now();
+		Stats.finishInput();
 
 		//  If enabled then notify the end of the sort input phase
 		if (Notifications) Log << "INFO: Sort input phase has completed." << std::endl;
@@ -282,9 +268,7 @@ public:
 		//  Sort merge phase 
 		//
 
-		StartMerge = xymorg::CLOCK::now();
-		SortRecs = pSR->signalEndOfSortInput();
-		EndMerge = xymorg::CLOCK::now();
+		pSR->signalEndOfSortInput();
 
 		//  If enabled then notify the end of the sort merge phase
 		if (Notifications) Log << "INFO: Sort merge phase has completed." << std::endl;
@@ -301,16 +285,17 @@ public:
 			return false;
 		}
 
-		StartOut = xymorg::CLOCK::now();
+		//  Record starting time for the output preparation
+		Stats.startOutput();
 
 		//  Allocate a buffer to hold the sort output
-		pSortout = (char*) malloc(SISize);
+		pSortout = (char*)malloc(SISize);
 		if (pSortout == nullptr) {
 			Log << "ERROR: Failed to allocate a buffer to hold the sort output (" << SISize << " bytes)." << std::endl;
 			free(pSortin);
 			delete pSR;
 			return false;
-		} 
+		}
 
 		//  Perform the sort output in ascending or descending sequence
 		pNextRec = pSortout;
@@ -338,25 +323,21 @@ public:
 		}
 
 		//  The sort ending time is taken at this point
-		EndOut = xymorg::CLOCK::now();
-		EndSort = xymorg::CLOCK::now();
+		Stats.finishOutput();
+		Stats.finishSorting();
 
 		//  Notify end of phase
 		if (Notifications) Log << "INFO: Sort output phase completed." << std::endl;
 
-		//  Get the cumulative Preemptive merge time
-		CumPMTime = pSR->getCumulativePMTime();
-		NumPMs = pSR->getPMCount();
-		PMStoresMerged = pSR->getPMStoresMerged();
 
 		//  Write the sortout buffer to disk
-		StartStore = xymorg::CLOCK::now();
+		Stats.startStoring();
 		if (!storeSortOutput(SFOut, pSortout, SISize)) {
 			Log << "ERROR: Failed to store: " << SISize << "bytes of sort output data." << std::endl;
 			free(pSortout);
 			return false;
 		}
-		EndStore = xymorg::CLOCK::now();
+		Stats.finishStoring();
 
 		//  Free the input and the root splitter
 		free(pSortin);
@@ -364,24 +345,7 @@ public:
 		free(pSortout);
 
 		//  If enabled show the timings
-		if (Timings) {
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndLoad - StartLoad);
-			Log << "INFO: Input data was loaded from disk into memory in: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndInput - StartInput);
-			//  Remove the preemtive merge time from the input phase total
-			PhaseTime -= CumPMTime;
-			Log << "INFO: Sort input phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			Log << "INFO: Preemptive merges for: " << SortRecs << " records took: " << CumPMTime.count() << " milliseconds." << std::endl;
-			Log << "INFO:    - " << NumPMs << " preemptive merges resulted in: " << PMStoresMerged << " stores being merged." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndMerge - StartMerge);
-			Log << "INFO: Sort merge phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndOut - StartOut);
-			Log << "INFO: Sort output phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
-			Log << "INFO: Sort for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndStore - StartStore);
-			Log << "INFO: Output data was stored from memory to disk in: " << PhaseTime.count() << " milliseconds." << std::endl;
-		}
+		if (Timings) Stats.showStats(Log);
 
 		//  Return showing success
 		return true;
@@ -421,25 +385,12 @@ public:
 		std::ofstream			Sortout;																//  Sort output stream
 		char*					SortRec = nullptr;														//  Input record buffer
 		ODSR					SRec = {};																//  Sort Record (internal)
-		size_t					SortRecs = 0;
 
 		//  Root Splitter of the Splitter chain
-		Splitter<ODSR>*			pSR = nullptr;
+		Splitter<ODSR>* pSR = nullptr;
 
-		//  Timing and metrics elements
-		xymorg::TIMER			StartSort = xymorg::CLOCK::now();										//  Start Sort
-		xymorg::TIMER			EndSort = xymorg::CLOCK::now();											//  End Sort
-		xymorg::TIMER			StartInput = xymorg::CLOCK::now();										//  Start of sort input phase
-		xymorg::TIMER			EndInput = xymorg::CLOCK::now();										//  End of sort input phase
-		xymorg::TIMER			StartMerge = xymorg::CLOCK::now();										//  Start of sort merge phase
-		xymorg::TIMER			EndMerge = xymorg::CLOCK::now();										//  End of sort merge phase
-		xymorg::TIMER			StartOut = xymorg::CLOCK::now();										//  Start of sort output phase
-		xymorg::TIMER			EndOut = xymorg::CLOCK::now();											//  End of sort output phase
-
-		xymorg::MILLISECONDS	PhaseTime(0);															//  Phase duration
-		xymorg::MILLISECONDS	CumPMTime(0);															//  Cumulative preemptive merge time
-		size_t					NumPMs = 0;																//  Count of preemptive merges
-		size_t					PMStoresMerged = 0;														//  Count of stores merged by PM
+		//  Instrumentation Statistics Object
+		IStats					Stats;
 
 		//
 		//  Setup ready for the input phase of the sort
@@ -447,7 +398,7 @@ public:
 
 		Log << "WARNING: This sort is being performed on-disk, DO NOT use the timings for benchmarks." << std::endl;
 
-		SortRec = (char*) malloc(MaxRecl);
+		SortRec = (char*)malloc(MaxRecl);
 		if (SortRec == nullptr) {
 			Log << "ERROR: Failed to allocate a " << MaxRecl << " byte buffer for sort input records." << std::endl;
 			return false;
@@ -481,7 +432,7 @@ public:
 		SRec.pKey = SortRec + SKOff;
 
 		//  Construct the root Splitter
-		pSR = new Splitter<ODSR>(SRec, SKLen, 64);
+		pSR = new Splitter<ODSR>(SRec, SKLen, 64, Stats);
 		if (pSR == nullptr) {
 			Log << "ERROR: Unable to create the root sort splitter." << std::endl;
 			free(SortRec);
@@ -493,7 +444,7 @@ public:
 		//  Sort input phase
 		//
 
-		StartInput = xymorg::CLOCK::now();
+		Stats.startInput();
 		while (!Sortin.eof()) {
 			SRec.RecPos = Sortin.tellg();
 			Sortin.getline(SortRec, MaxRecl);
@@ -504,7 +455,7 @@ public:
 			pSR->addExternalKey(SRec, PMEnabled);
 		}
 
-		EndInput = xymorg::CLOCK::now();
+		Stats.finishInput();
 
 		//  If enabled then notify the end of the sort input phase
 		if (Notifications) Log << "INFO: Sort input phase has completed." << std::endl;
@@ -513,9 +464,7 @@ public:
 		//  Sort merge phase
 		//
 
-		StartMerge = xymorg::CLOCK::now();
-		SortRecs = pSR->signalEndOfSortInput();
-		EndMerge = xymorg::CLOCK::now();
+		pSR->signalEndOfSortInput();
 
 		//  If enabled then notify the end of the sort merge phase
 		if (Notifications) Log << "INFO: Sort merge phase has completed." << std::endl;
@@ -546,7 +495,7 @@ public:
 		//  Clear EOF and Fail on the sortin stream
 		Sortin.clear(std::ifstream::goodbit);
 
-		StartOut = xymorg::CLOCK::now();
+		Stats.startOutput();
 
 		if (Ascending) {
 
@@ -571,18 +520,13 @@ public:
 			}
 		}
 
-		EndOut = xymorg::CLOCK::now();
+		Stats.finishOutput();
 
 		//  Notify end of phase
 		if (Notifications) Log << "INFO: Sort output phase completed." << std::endl;
 
 		//  Record End of sort
-		EndSort = xymorg::CLOCK::now();
-
-		//  Get the cumulative Preemptive merrge time
-		CumPMTime = pSR->getCumulativePMTime();
-		NumPMs = pSR->getPMCount();
-		PMStoresMerged = pSR->getPMStoresMerged();
+		Stats.finishSorting();
 
 		//  Free the input, output and the root splitter
 		Sortin.close();
@@ -591,20 +535,7 @@ public:
 		free(SortRec);
 
 		//  If enabled show the timings
-		if (Timings) {
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndInput - StartInput);
-			//  Remove the preemtive merge time from the input phase total
-			PhaseTime -= CumPMTime;
-			Log << "INFO: Sort input phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			Log << "INFO: Preemptive merges for: " << SortRecs << " records took: " << CumPMTime.count() << " milliseconds." << std::endl;
-			Log << "INFO:    - " << NumPMs << " preemptive merges resulted in: " << PMStoresMerged << " stores being merged." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndMerge - StartMerge);
-			Log << "INFO: Sort merge phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndOut - StartOut);
-			Log << "INFO: Sort output phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
-			Log << "INFO: Sort of: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-		}
+		if (Timings) Stats.showStats(Log);
 
 		//  Return showing success
 		return true;
@@ -637,47 +568,31 @@ public:
 		size_t SKLen,
 		bool Ascending,
 		bool PMEnabled) {
+
 		char*					pSortin = nullptr;														//  Sort input in-memory buffer
 		char*					pSortout = nullptr;														//  Sort output in-memory buffer
 		size_t					SISize = 0;																//  Sort input size
 		char*					pEOI = nullptr;															//  Pointer to the End-Of-Input
 		char*					pNextRec = nullptr;														//  Pointer to the next record
 		IMSR					SRec = {};																//  In-Memory sort record (internal)
-		size_t					SortRecs = 0;															//  Count of records sorted
 
 		//  Root Splitter of the Splitter chain
-		Splitter<IMSR>*			pSR = nullptr;
+		Splitter<IMSR>* pSR = nullptr;
 
-		//  Timing and metrics elements
-		xymorg::TIMER			StartLoad = xymorg::CLOCK::now();										//  Start loading data file
-		xymorg::TIMER			EndLoad = xymorg::CLOCK::now();											//  End loading data file
-		xymorg::TIMER			StartSort = xymorg::CLOCK::now();										//  Start Sort
-		xymorg::TIMER			EndSort = xymorg::CLOCK::now();											//  End Sort
-		xymorg::TIMER			StartInput = xymorg::CLOCK::now();										//  Start of sort input phase
-		xymorg::TIMER			EndInput = xymorg::CLOCK::now();										//  End of sort input phase
-		xymorg::TIMER			StartMerge = xymorg::CLOCK::now();										//  Start of sort merge phase
-		xymorg::TIMER			EndMerge = xymorg::CLOCK::now();										//  End of sort merge phase
-		xymorg::TIMER			StartOut = xymorg::CLOCK::now();										//  Start of sort output phase
-		xymorg::TIMER			EndOut = xymorg::CLOCK::now();											//  End of sort output phase
-		xymorg::TIMER			StartStore = xymorg::CLOCK::now();										//  Start storing data file
-		xymorg::TIMER			EndStore = xymorg::CLOCK::now();										//  End storing data file
-
-		xymorg::MILLISECONDS	PhaseTime(0);															//  Phase duration
-		xymorg::MILLISECONDS	CumPMTime(0);															//  Cumulative preemptive merge time
-		size_t					NumPMs = 0;																//  Count of preemptive merges
-		size_t					PMStoresMerged = 0;														//  Count of stores merged by PM
+		//  Instrumentation Statistics Object
+		IStats					Stats;
 
 		//  Load the designated sort input into memory
-		StartLoad = xymorg::CLOCK::now();
+		Stats.startLoading();
 		pSortin = loadSortInput(SFIn, SISize);
 		if (pSortin == nullptr) {
 			Log << "ERROR: Failed to load the sort input into memory, it may be too big to sort in-memory." << std::endl;
 			return false;
 		}
-		EndLoad = xymorg::CLOCK::now();
+		Stats.finishLoading();
 
 		//  The sort timing starts once the data has been loaded
-		StartSort = xymorg::CLOCK::now();
+		Stats.startSorting();
 
 		pEOI = pSortin + SISize;
 		pNextRec = pSortin;																				//  Next record is the first
@@ -692,7 +607,7 @@ public:
 		else pNextRec++;
 
 		//  Create the Root Splitter
-		pSR = new Splitter<IMSR>(SRec, SKLen);
+		pSR = new Splitter<IMSR>(SRec, SKLen, Stats);
 		if (pSR == nullptr) {
 			Log << "ERROR: Unable to create the root Splitter to perform the sort." << std::endl;
 			return false;
@@ -702,7 +617,7 @@ public:
 		//  Sort Input phase - load each record to the root splitter
 		//
 
-		StartInput = xymorg::CLOCK::now();
+		Stats.startInput();
 
 		//  Process each record in turn
 		while (pNextRec < pEOI) {
@@ -718,18 +633,16 @@ public:
 		}
 
 		//  Record the ending time
-		EndInput = xymorg::CLOCK::now();
+		Stats.finishInput();
 
 		//  If enabled then notify the end of the sort input phase
 		if (Notifications) Log << "INFO: Sort input phase has completed." << std::endl;
 
 		//
-		//  Sort merge phase 
+		//  Sort final merge phase 
 		//
 
-		StartMerge = xymorg::CLOCK::now();
-		SortRecs = pSR->signalEndOfStableSortInput(Ascending);
-		EndMerge = xymorg::CLOCK::now();
+		pSR->signalEndOfStableSortInput(Ascending);
 
 		//  If enabled then notify the end of the sort merge phase
 		if (Notifications) Log << "INFO: Sort merge phase has completed." << std::endl;
@@ -746,7 +659,7 @@ public:
 			return false;
 		}
 
-		StartOut = xymorg::CLOCK::now();
+		Stats.startOutput();
 
 		//  Allocate a buffer to hold the sort output
 		pSortout = (char*)malloc(SISize);
@@ -783,25 +696,20 @@ public:
 		}
 
 		//  The sort ending time is taken at this point
-		EndOut = xymorg::CLOCK::now();
-		EndSort = xymorg::CLOCK::now();
+		Stats.finishOutput();
+		Stats.finishSorting();
 
 		//  Notify end of phase
 		if (Notifications) Log << "INFO: Sort output phase completed." << std::endl;
 
-		//  Get the cumulative Preemptive merge time
-		CumPMTime = pSR->getCumulativePMTime();
-		NumPMs = pSR->getPMCount();
-		PMStoresMerged = pSR->getPMStoresMerged();
-
 		//  Write the sortout buffer to disk
-		StartStore = xymorg::CLOCK::now();
+		Stats.startStoring();
 		if (!storeSortOutput(SFOut, pSortout, SISize)) {
 			Log << "ERROR: Failed to store: " << SISize << "bytes of sort output data." << std::endl;
 			free(pSortout);
 			return false;
 		}
-		EndStore = xymorg::CLOCK::now();
+		Stats.finishStoring();
 
 		//  Free the input and the root splitter
 		free(pSortin);
@@ -809,24 +717,7 @@ public:
 		free(pSortout);
 
 		//  If enabled show the timings
-		if (Timings) {
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndLoad - StartLoad);
-			Log << "INFO: Input data was loaded from disk into memory in: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndInput - StartInput);
-			//  Remove the preemtive merge time from the input phase total
-			PhaseTime -= CumPMTime;
-			Log << "INFO: Sort input phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			Log << "INFO: Preemptive merges for: " << SortRecs << " records took: " << CumPMTime.count() << " milliseconds." << std::endl;
-			Log << "INFO:    - " << NumPMs << " preemptive merges resulted in: " << PMStoresMerged << " stores being merged." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndMerge - StartMerge);
-			Log << "INFO: Sort merge phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndOut - StartOut);
-			Log << "INFO: Sort output phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
-			Log << "INFO: Sort for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndStore - StartStore);
-			Log << "INFO: Output data was stored from memory to disk in: " << PhaseTime.count() << " milliseconds." << std::endl;
-		}
+		if (Timings) Stats.showStats(Log);
 
 		//  Return showing success
 		return true;
@@ -866,25 +757,12 @@ public:
 		std::ofstream			Sortout;																//  Sort output stream
 		char*					SortRec = nullptr;														//  Input record buffer
 		ODSR					SRec = {};																//  Sort Record (internal)
-		size_t					SortRecs = 0;
 
 		//  Root Splitter of the Splitter chain
-		Splitter<ODSR>*			pSR = nullptr;
+		Splitter<ODSR>* pSR = nullptr;
 
-		//  Timing elements
-		xymorg::TIMER			StartSort = xymorg::CLOCK::now();										//  Start Sort
-		xymorg::TIMER			EndSort = xymorg::CLOCK::now();											//  End Sort
-		xymorg::TIMER			StartInput = xymorg::CLOCK::now();										//  Start of sort load phase
-		xymorg::TIMER			EndInput = xymorg::CLOCK::now();											//  End of sort load phase
-		xymorg::TIMER			StartMerge = xymorg::CLOCK::now();										//  Start of sort merge phase
-		xymorg::TIMER			EndMerge = xymorg::CLOCK::now();										//  End of sort merge phase
-		xymorg::TIMER			StartOut = xymorg::CLOCK::now();										//  Start of sort output phase
-		xymorg::TIMER			EndOut = xymorg::CLOCK::now();											//  End of sort output phase
-
-		xymorg::MILLISECONDS	PhaseTime(0);															//  Phase duration
-		xymorg::MILLISECONDS	CumPMTime(0);															//  Cumulative preemptive merge time
-		size_t					NumPMs = 0;																//  Count of preemptive merges
-		size_t					PMStoresMerged = 0;														//  Count of stores merged by PM
+		//  Instrumentation Statistics Object
+		IStats					Stats;
 
 		//
 		//  Setup ready for the input phase of the sort
@@ -892,7 +770,7 @@ public:
 
 		Log << "WARNING: This sort is being performed on-disk, DO NOT use the timings for benchmarks." << std::endl;
 
-		SortRec = (char*) malloc(MaxRecl);
+		SortRec = (char*)malloc(MaxRecl);
 		if (SortRec == nullptr) {
 			Log << "ERROR: Failed to allocate a " << MaxRecl << " byte buffer for sort input records." << std::endl;
 			return false;
@@ -926,7 +804,7 @@ public:
 		SRec.pKey = SortRec + SKOff;
 
 		//  Construct the root Splitter
-		pSR = new Splitter<ODSR>(SRec, SKLen, 64);
+		pSR = new Splitter<ODSR>(SRec, SKLen, 64, Stats);
 		if (pSR == nullptr) {
 			Log << "ERROR: Unable to create the root sort splitter." << std::endl;
 			free(SortRec);
@@ -938,7 +816,7 @@ public:
 		//  Sort input phase
 		//
 
-		StartInput = xymorg::CLOCK::now();
+		Stats.startInput();
 		while (!Sortin.eof()) {
 			SRec.RecPos = Sortin.tellg();
 			Sortin.getline(SortRec, MaxRecl);
@@ -949,7 +827,7 @@ public:
 			pSR->addStableExternalKey(SRec, Ascending, PMEnabled);
 		}
 
-		EndInput = xymorg::CLOCK::now();
+		Stats.finishInput();
 
 		//  If enabled then notify the end of the sort input phase
 		if (Notifications) Log << "INFO: Sort input phase has completed." << std::endl;
@@ -958,9 +836,7 @@ public:
 		//  Sort merge phase
 		//
 
-		StartMerge = xymorg::CLOCK::now();
-		SortRecs = pSR->signalEndOfStableSortInput(Ascending);
-		EndMerge = xymorg::CLOCK::now();
+		pSR->signalEndOfStableSortInput(Ascending);
 
 		//  If enabled then notify the end of the sort merge phase
 		if (Notifications) Log << "INFO: Sort merge phase has completed." << std::endl;
@@ -991,7 +867,7 @@ public:
 		//  Clear EOF and Fail on the sortin stream
 		Sortin.clear(std::ifstream::goodbit);
 
-		StartOut = xymorg::CLOCK::now();
+		Stats.startOutput();
 
 		if (Ascending) {
 
@@ -1016,18 +892,13 @@ public:
 			}
 		}
 
-		EndOut = xymorg::CLOCK::now();
+		Stats.finishOutput();
 
 		//  Notify end of phase
 		if (Notifications) Log << "INFO: Sort output phase completed." << std::endl;
 
 		//  Record End of sort
-		EndSort = xymorg::CLOCK::now();
-
-		//  Get the cumulative Preemptive merrge time
-		CumPMTime = pSR->getCumulativePMTime();
-		NumPMs = pSR->getPMCount();
-		PMStoresMerged = pSR->getPMStoresMerged();
+		Stats.finishSorting();
 
 		//  Free the input, output and the root splitter
 		Sortin.close();
@@ -1036,20 +907,7 @@ public:
 		free(SortRec);
 
 		//  If enabled show the timings
-		if (Timings) {
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndInput - StartInput);
-			//  Remove the preemtive merge time from the load phase total
-			PhaseTime -= CumPMTime;
-			Log << "INFO: Sort input phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			Log << "INFO: Preemptive merges for: " << SortRecs << " records took: " << CumPMTime.count() << " milliseconds." << std::endl;
-			Log << "INFO:    - " << NumPMs << " preemptive merges resulted in: " << PMStoresMerged << " stores being merged." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndMerge - StartMerge);
-			Log << "INFO: Sort merge phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndOut - StartOut);
-			Log << "INFO: Sort output phase for: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-			PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
-			Log << "INFO: Sort of: " << SortRecs << " records took: " << PhaseTime.count() << " milliseconds." << std::endl;
-		}
+		if (Timings) Stats.showStats(Log);
 
 		//  Return showing success
 		return true;
@@ -1065,7 +923,7 @@ private:
 	//*******************************************************************************************************************
 
 	//  External references
-	std::ostream&		Log;
+	std::ostream& Log;
 
 	//  Configuration Controls
 	bool				Notifications;										//  Notification messages enabled
@@ -1125,7 +983,7 @@ private:
 
 		//  Allocate a buffer to hold the file contents
 		//  3 additional bytes are allocated one for EOS (\0) and two for a possible cr/lf insert
-		pFImg = (char*) malloc(FSize + 3);
+		pFImg = (char*)malloc(FSize + 3);
 		if (pFImg == nullptr) {
 			fclose(pRFile);
 			Log << "ERROR: Failed to allocate: " << FSize << " bytes to hold the sort input." << std::endl;

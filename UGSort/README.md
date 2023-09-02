@@ -8,3 +8,5 @@ The application is minimally instrumented to provide the ability to perform timi
 The application is intended for use on Windows and Linux deployments.
 
 This implementation supports in-memory or on-disk sorting, output in ascending or descending sequence and optionally key stability.
+
+v1.15 Uses an optimised UGSort algorithm that uses a binary chop for searching the array of splitter stores.

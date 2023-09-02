@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       Splitter.h																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.13.0	(Build: 14)																				*
+//*   Version:    1.15.0	(Build: 16)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -40,6 +40,7 @@
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
 //*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
 //*							-	Corrected PM control parameters														*
+//*	1.15.0 -	25/08/2023	-	Binary-Chop search of Store Chain													*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -47,6 +48,7 @@
 #include	"../xymorg/xymorg.h"															//  xymorg system headers
 
 //  Application headers
+#include	"IStats.h"																		//  Instrumentation
 #include	"SplitStore.h"																	//  Splitter Store
 
 //
@@ -330,7 +332,7 @@ public:
 		//*******************************************************************************************************************
 
 		size_t		CurrPos;													//  Ordinal position index of current record
-		T*			pRec;														//  Pointer to the current record
+		T* pRec;														//  Pointer to the current record
 
 		//*******************************************************************************************************************
 		//*                                                                                                                 *
@@ -339,6 +341,18 @@ public:
 		//*******************************************************************************************************************
 
 	};
+
+	//*******************************************************************************************************************
+	//*                                                                                                                 *
+	//*   Public Nested Structures	                                                                                    *
+	//*                                                                                                                 *
+	//*******************************************************************************************************************
+
+	typedef struct StoreChain {
+		size_t			StoreCount;													//  Count of stores in the chain
+		size_t			StoreCap;													//  Store capacity
+		SplitStore<T>* Store[4096];												//  Array of pointers to the stores
+	} StoreChain;
 
 	//*******************************************************************************************************************
 	//*                                                                                                                 *
@@ -354,22 +368,34 @@ public:
 	//
 	//		T&				-		Reference to the initial record to be stored in the Splitter stores
 	//		size_t			-		Sort Key Length
+	//		IStats&			-		Reference to the instrumentation object
 	//
 	//  RETURNS:
 	//
 	//  NOTES:
 	//
 
-	Splitter<T>(T& IRec, size_t KeyLen) : KL(KeyLen), CumPMTime(0), NumPMs(0), PMStoresMerged(0) {
+	Splitter<T>(T& IRec, size_t KeyLen, IStats& Ins) : KL(KeyLen), Stats(Ins) {
 
 		//  Initialise the splitStore chain
-		pStore = new SplitStore<T>(IRec, KeyLen);
+		pStoreChain = (StoreChain*) malloc((2 * sizeof(size_t)) + (4096 * sizeof(void*)));
+		if (pStoreChain == nullptr) {
+			//  Fatal
+			std::cerr << "FATAL: Failed to allocate a new Store Chain structure." << std::endl;
+			std::abort();
+		}
+		else {
+			memset(pStoreChain, 0, (2 * sizeof(size_t)) + (4096 * sizeof(void*)));
+			pStoreChain->StoreCap = 4096; 
+			pStoreChain->Store[0] = new SplitStore<T>(IRec, KeyLen, Stats);
+			pStoreChain->StoreCount = 1;
+			Stats.newKey();
+		}
 
 		//  Initialise the Preemptive Merge controls
 		RecNo = 1;
-		StoreCount = 1;
 		MaxStores = 100;
-		MaxSInc = 25;
+		MaxSInc = 100;
 
 		//  Return to caller
 		return;
@@ -384,22 +410,34 @@ public:
 	//		T&				-		Reference to the initial record to be stored in the Splitter
 	//		size_t			-		Sort Key Length
 	//		size_t			-		Keystore Arena Size in KB
+	//		IStats&			-		Reference to the instrumentation object
 	//
 	//  RETURNS:
 	//
 	//  NOTES:
 	//
 
-	Splitter<T>(T& IRec, size_t KeyLen, size_t KSASizeKB) : KL(KeyLen), CumPMTime(0), NumPMs(0), PMStoresMerged(0) {
+	Splitter<T>(T& IRec, size_t KeyLen, size_t KSASizeKB, IStats& Ins) : KL(KeyLen), Stats(Ins) {
 
-		//  Initialise the splitstore chain
-		pStore = new SplitStore<T>(IRec, KeyLen, KSASizeKB);
+		//  Initialise the splitStore chain
+		pStoreChain = (StoreChain*) malloc((2 * sizeof(size_t)) + (4096 * sizeof(void*)));
+		if (pStoreChain == nullptr) {
+			//  Fatal
+			std::cerr << "FATAL: Failed to allocate a new Store Chain structure." << std::endl;
+			std::abort();
+		}
+		else {
+			memset(pStoreChain, 0, (2 * sizeof(size_t)) + (4096 * sizeof(void*)));
+			pStoreChain->StoreCap = 4096;
+			pStoreChain->Store[0] = new SplitStore<T>(IRec, KeyLen, KSASizeKB, Stats);
+			pStoreChain->StoreCount = 1;
+			Stats.newKey();
+		}
 
 		//  Initialise the Preemptive Merge controls
 		RecNo = 1;
-		StoreCount = 1;
 		MaxStores = 100;
-		MaxSInc = 25;
+		MaxSInc = 100;
 
 		//  Return to caller
 		return;
@@ -425,8 +463,12 @@ public:
 	~Splitter() {
 
 		//  Destroy the SplitStore chain (if it exists)
-		if (pStore != nullptr) delete pStore;
-		pStore = nullptr;
+
+		if (pStoreChain != nullptr) {
+			for (int sIndex = 0; sIndex < pStoreChain->StoreCount; sIndex++) delete pStoreChain->Store[sIndex];
+			delete pStoreChain;
+		}
+		pStoreChain = nullptr;
 
 		//  Return to caller
 		return;
@@ -461,50 +503,121 @@ public:
 	//  
 
 	void	add(T& NewSR, bool PMEnabled) {
-		SplitStore<T>*		pCurrStore = pStore;										//  Current splitter store
-		SplitStore<T>*		pLastStore = pStore;										//  Terminal splitter
+		int			CurrentStore = 0;														//  Start of the Store chain
+		int			Delta = 0;																//  Delta distance for Binary Chop
+		bool		Without = false;														//  Within/Without control
+		bool		Below = false;															//  Above or below control
+		bool		OtherWithout = false;													//  Other Within/Without control
 
-		//  Increment the record number and if it is a multiple of the increment factor bump the max stores
+		//  Increment the record number
 		RecNo++;
-		//if (RecNo % MaxSIncRecs == 0) MaxStores += MaxSInc;
+		Stats.newKey();
 
-		//  Loop processing each splitter on the chain
-		while (pCurrStore != nullptr) {
+		//
+		//  First check against the boundaries of the store chain
+		//
 
-			//  Determine if the new record should be inserted before the low key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRALo].pKey, KL) <= 0) {
-				pCurrStore->addLowKey(NewSR);
-				return;
-			}
-
-			//  Determine if the new record key can be inserted after the high key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRAHi].pKey, KL) >= 0) {
-				pCurrStore->addHighKey(NewSR);
-				return;
-			}
-			//  Advance to the next store
-			if (pCurrStore->pNext == nullptr) pLastStore = pCurrStore;
-			pCurrStore = pCurrStore->pNext;
+		//  If the new key is equal or below the low key set a new low key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) <= 0) {
+			pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
+			return;
 		}
 
-		//  End of the store chain reached without consuming the new record.
-		//  A new store must be added to the chain to accomodate the new record
-
-		pLastStore->addNewStore(NewSR);
-		StoreCount++;
-
-		//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
-		if (PMEnabled && (StoreCount > MaxStores)) {
-			//  Perform the preemptive merge
-			doPreemptiveMerge();
-			//  Reset the store count
-			StoreCount = count();
-			//  Recompute the Maximum number of stores
-			MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+		//  If the new key is equal or above the high key then set a new high key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) >= 0) {
+			pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+			return;
 		}
 
-		//  Return to caller
-		return;
+		CurrentStore = int(pStoreChain->StoreCount) - 1;
+
+		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) {
+				//  A new store must be added to the array to accomodate the key
+				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
+				pStoreChain->StoreCount++;
+
+				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
+				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
+					//  Perform the preemptive merge
+					doPreemptiveMerge(true);
+					//  Recompute the Maximum number of stores
+					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+
+					//  Check that there is capacity in the StoreChain structure to accomodate the maximum number of stores
+					if (MaxStores > pStoreChain->StoreCap) expandStoreChain();
+				}
+				else {
+					if (!PMEnabled) {
+						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
+					}
+				}
+				return;
+			}
+		}
+
+		//
+		//  Setup to perform a Binary Chop search of the Store Chain beginning at the Mid-Point.
+		//
+
+		CurrentStore = int(pStoreChain->StoreCount) / 2;									//  Mid-point of the store chain
+		Delta = int(pStoreChain->StoreCount) / 4;											//  Initial distance
+
+		while (true) {
+
+			//  Determine if the new key is without or within the range of the current store
+			Below = true;
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
+				Below = false;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) Without = false;
+				else Without = true;
+			}
+			else Without = true;
+
+			if (Without) {
+				if (CurrentStore == 0) OtherWithout = false;
+				else {
+					//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) > 0) {
+						if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
+						else OtherWithout = true;
+					}
+					else OtherWithout = true;
+				}
+				//  If Within range of the other then add the key to the CurrentStore
+				if (!OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
+					else pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+					return;
+				}
+
+				//  Move further to the left
+				CurrentStore = CurrentStore - Delta;
+				if (Delta > 1) Delta = Delta / 2;
+			}
+			else {
+				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
+				Below = true;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) > 0) {
+					Below = false;
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Without range of the other store then add the key to the other store
+				if (OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowKey(NewSR);
+					else pStoreChain->Store[CurrentStore + 1]->addHighKey(NewSR);
+					return;
+				}
+
+				//  Move further to the right
+				CurrentStore = CurrentStore + Delta;
+				if (Delta > 1) Delta = Delta / 2;
+			}
+		}
 	}
 
 	//  addExternalKey
@@ -524,49 +637,119 @@ public:
 	//  
 
 	void	addExternalKey(T& NewSR, bool PMEnabled) {
-		SplitStore<T>*		pCurrStore = pStore;										//  Current splitter store
-		SplitStore<T>*		pLastStore = pStore;										//  Terminal splitter
+		int			CurrentStore = 0;														//  Start of the Store chain
+		int			Delta = 0;																//  Delta distance for Binary Chop
+		bool		Without = false;														//  Within/Without control
+		bool		Below = false;															//  Above or below control
+		bool		OtherWithout = false;													//  Other Within/Without control
 
-		//  Increment the record number and if it is a multiple of the increment factor bump the max stores
+		//  Increment the record number
 		RecNo++;
+		Stats.newKey();
 
-		//  Loop processing each splitter on the chain
-		while (pCurrStore != nullptr) {
+		//
+		//  First check against the boundaries of the store chain
+		//
 
-			//  Determine if the new record should be inserted before the low key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRALo].pKey, KL) <= 0) {
-				pCurrStore->addLowExternalKey(NewSR);
-				return;
-			}
-
-			//  Determine if the new record key can be inserted after the high key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRAHi].pKey, KL) >= 0) {
-				pCurrStore->addHighExternalKey(NewSR);
-				return;
-			}
-			//  Advance to the next store
-			if (pCurrStore->pNext == nullptr) pLastStore = pCurrStore;
-			pCurrStore = pCurrStore->pNext;
+		//  If the new key is equal or below the low key set a new low key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) <= 0) {
+			pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
+			return;
 		}
 
-		//  End of the store chain reached without consuming the new record.
-		//  A new store must be added to the chain to accomodate the new record
-
-		pLastStore->addNewExternalKeyStore(NewSR);
-		StoreCount++;
-
-		//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
-		if (PMEnabled && (StoreCount > MaxStores)) {
-			//  Perform the preemptive merge
-			doPreemptiveMerge();
-			//  Reset the store count
-			StoreCount = count();
-			//  Recompute the Maximum number of stores
-			MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+		//  If the new key is equal or above the high key then set a new high key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) >= 0) {
+			pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+			return;
 		}
 
-		//  Return to caller
-		return;
+		CurrentStore = int(pStoreChain->StoreCount) - 1;
+
+		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) {
+				//  A new store must be added to the array to accomodate the key
+				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
+				pStoreChain->StoreCount++;
+
+				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
+				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
+					//  Perform the preemptive merge
+					doPreemptiveMerge(true);
+					//  Recompute the Maximum number of stores
+					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+
+					//  Check that there is capacity in the StoreChain structure to accomodate the maximum number of stores
+					if (MaxStores > pStoreChain->StoreCap) expandStoreChain();
+				}
+				else {
+					if (!PMEnabled) {
+						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
+					}
+				}
+				return;
+			}
+		}
+
+		//
+		//  Setup to perform a Binary Chop search of the Store Chain beginning at the Mid-Point.
+		//
+
+		CurrentStore = int(pStoreChain->StoreCount) / 2;									//  Mid-point of the store chain
+		Delta = int(pStoreChain->StoreCount) / 4;											//  Initial distance
+
+		while (true) {
+
+			//  Determine if the new key is without or within the range of the current store
+			Below = true;
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
+				Below = false;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) Without = false;
+				else Without = true;
+			}
+			else Without = true;
+
+			if (Without) {
+				//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) > 0) {
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Within range of the other then add the key to the CurrentStore
+				if (!OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
+					else pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+					return;
+				}
+
+				//  Move further to the left
+				CurrentStore = CurrentStore - Delta;
+				Delta = Delta / 2;
+			}
+			else {
+				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
+				Below = true;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) > 0) {
+					Below = false;
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Without range of the other store then add the key to the other store
+				if (OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowExternalKey(NewSR);
+					else pStoreChain->Store[CurrentStore + 1]->addHighExternalKey(NewSR);
+					return;
+				}
+
+				//  Move further to the right
+				CurrentStore = CurrentStore + Delta;
+				Delta = Delta / 2;
+			}
+		}
 	}
 
 	//
@@ -592,49 +775,119 @@ public:
 	//  
 
 	void	addStableKey(T& NewSR, bool Ascending, bool PMEnabled) {
-		SplitStore<T>*		pCurrStore = pStore;										//  Current splitter store
-		SplitStore<T>*		pLastStore = pStore;										//  Terminal splitter
+		int			CurrentStore = 0;														//  Start of the Store chain
+		int			Delta = 0;																//  Delta distance for Binary Chop
+		bool		Without = false;														//  Within/Without control
+		bool		Below = false;															//  Above or below control
+		bool		OtherWithout = false;													//  Other Within/Without control
 
-		//  Increment the record number and if it is a multiple of the increment factor bump the max stores
+		//  Increment the record number
 		RecNo++;
+		Stats.newKey();
 
-		//  Loop processing each splitter on the chain
-		while (pCurrStore != nullptr) {
+		//
+		//  First check against the boundaries of the store chain
+		//
 
-			//  Determine if the new record should be inserted before the low key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRALo].pKey, KL) < 0) {
-				pCurrStore->addLowKey(NewSR);
-				return;
-			}
-
-			//  Determine if the new record key can be inserted after the high key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRAHi].pKey, KL) > 0) {
-				pCurrStore->addHighKey(NewSR);
-				return;
-			}
-			//  Advance to the next store
-			if (pCurrStore->pNext == nullptr) pLastStore = pCurrStore;
-			pCurrStore = pCurrStore->pNext;
+		//  If the new key is equal or below the low key set a new low key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) < 0) {
+			pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
+			return;
 		}
 
-		//  End of the store chain reached without consuming the new record.
-		//  A new store must be added to the chain to accomodate the new record
-
-		pLastStore->addNewStore(NewSR);
-		StoreCount++;
-
-		//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
-		if (PMEnabled && (StoreCount > MaxStores)) {
-			//  Perform the preemptive merge
-			doStablePreemptiveMerge(Ascending);
-			//  Reset the store count
-			StoreCount = count();
-			//  Recompute the Maximum number of stores
-			MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+		//  If the new key is equal or above the high key then set a new high key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) > 0) {
+			pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+			return;
 		}
 
-		//  Return to caller
-		return;
+		CurrentStore = int(pStoreChain->StoreCount) - 1;
+
+		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) {
+				//  A new store must be added to the array to accomodate the key
+				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
+				pStoreChain->StoreCount++;
+
+				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
+				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
+					//  Perform the preemptive merge
+					doStablePreemptiveMerge(Ascending, true);
+					//  Recompute the Maximum number of stores
+					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+
+					//  Check that there is capacity in the StoreChain structure to accomodate the maximum number of stores
+					if (MaxStores > pStoreChain->StoreCap) expandStoreChain();
+				}
+				else {
+					if (!PMEnabled) {
+						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
+					}
+				}
+				return;
+			}
+		}
+
+		//
+		//  Setup to perform a Binary Chop search of the Store Chain beginning at the Mid-Point.
+		//
+
+		CurrentStore = int(pStoreChain->StoreCount) / 2;									//  Mid-point of the store chain
+		Delta = int(pStoreChain->StoreCount) / 4;											//  Initial distance
+
+		while (true) {
+
+			//  Determine if the new key is without or within the range of the current store
+			Below = true;
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
+				Below = false;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) Without = false;
+				else Without = true;
+			}
+			else Without = true;
+
+			if (Without) {
+				//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) >= 0) {
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Within range of the other then add the key to the CurrentStore
+				if (!OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
+					else pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+					return;
+				}
+
+				//  Move further to the left
+				CurrentStore = CurrentStore - Delta;
+				Delta = Delta / 2;
+			}
+			else {
+				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
+				Below = true;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) >= 0) {
+					Below = false;
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Without range of the other store then add the key to the other store
+				if (OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowKey(NewSR);
+					else pStoreChain->Store[CurrentStore + 1]->addHighKey(NewSR);
+					return;
+				}
+
+				//  Move further to the right
+				CurrentStore = CurrentStore + Delta;
+				Delta = Delta / 2;
+			}
+		}
 	}
 
 	//  addStableExternalKey
@@ -655,49 +908,119 @@ public:
 	//  
 
 	void	addStableExternalKey(T& NewSR, bool Ascending, bool PMEnabled) {
-		SplitStore<T>*		pCurrStore = pStore;										//  Current splitter store
-		SplitStore<T>*		pLastStore = pStore;										//  Terminal splitter
+		int			CurrentStore = 0;														//  Start of the Store chain
+		int			Delta = 0;																//  Delta distance for Binary Chop
+		bool		Without = false;														//  Within/Without control
+		bool		Below = false;															//  Above or below control
+		bool		OtherWithout = false;													//  Other Within/Without control
 
-		//  Increment the record number and if it is a multiple of the increment factor bump the max stores
+		//  Increment the record number
 		RecNo++;
+		Stats.newKey();
 
-		//  Loop processing each splitter on the chain
-		while (pCurrStore != nullptr) {
+		//
+		//  First check against the boundaries of the store chain
+		//
 
-			//  Determine if the new record should be inserted before the low key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRALo].pKey, KL) < 0) {
-				pCurrStore->addLowExternalKey(NewSR);
-				return;
-			}
-
-			//  Determine if the new record key can be inserted after the high key record in the current splitter
-			if (memcmp(NewSR.pKey, pCurrStore->pSRA[pCurrStore->SRAHi].pKey, KL) > 0) {
-				pCurrStore->addHighExternalKey(NewSR);
-				return;
-			}
-			//  Advance to the next store
-			if (pCurrStore->pNext == nullptr) pLastStore = pCurrStore;
-			pCurrStore = pCurrStore->pNext;
+		//  If the new key is equal or below the low key set a new low key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) < 0) {
+			pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
+			return;
 		}
 
-		//  End of the store chain reached without consuming the new record.
-		//  A new store must be added to the chain to accomodate the new record
-
-		pLastStore->addNewExternalKeyStore(NewSR);
-		StoreCount++;
-
-		//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
-		if (PMEnabled && (StoreCount > MaxStores)) {
-			//  Perform the preemptive merge
-			doStablePreemptiveMerge(Ascending);
-			//  Reset the store count
-			StoreCount = count();
-			//  Recompute the Maximum number of stores
-			MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+		//  If the new key is equal or above the high key then set a new high key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) > 0) {
+			pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+			return;
 		}
 
-		//  Return to caller
-		return;
+		CurrentStore = int(pStoreChain->StoreCount) - 1;
+
+		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) {
+				//  A new store must be added to the array to accomodate the key
+				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
+				pStoreChain->StoreCount++;
+
+				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
+				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
+					//  Perform the preemptive merge
+					doStablePreemptiveMerge(Ascending, true);
+					//  Recompute the Maximum number of stores
+					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
+
+					//  Check that there is capacity in the StoreChain structure to accomodate the maximum number of stores
+					if (MaxStores > pStoreChain->StoreCap) expandStoreChain();
+				}
+				else {
+					if (!PMEnabled) {
+						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
+					}
+				}
+				return;
+			}
+		}
+
+		//
+		//  Setup to perform a Binary Chop search of the Store Chain beginning at the Mid-Point.
+		//
+
+		CurrentStore = int(pStoreChain->StoreCount) / 2;											//  Mid-point of the store chain
+		Delta = int(pStoreChain->StoreCount) / 4;													//  Next distance
+
+		while (true) {
+
+			//  Determine if the new key is without or within the range of the current store
+			Below = true;
+			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
+				Below = false;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) Without = false;
+				else Without = true;
+			}
+			else Without = true;
+
+			if (Without) {
+				//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) >= 0) {
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Within range of the other then add the key to the CurrentStore
+				if (!OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
+					else pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+					return;
+				}
+
+				//  Move further to the left
+				CurrentStore = CurrentStore - Delta;
+				Delta = Delta / 2;
+			}
+			else {
+				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
+				Below = true;
+				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) >= 0) {
+					Below = false;
+					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
+					else OtherWithout = true;
+				}
+				else OtherWithout = true;
+
+				//  If Without range of the other store then add the key to the other store
+				if (OtherWithout) {
+					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowExternalKey(NewSR);
+					else pStoreChain->Store[CurrentStore + 1]->addHighExternalKey(NewSR);
+					return;
+				}
+
+				//  Move further to the right
+				CurrentStore = CurrentStore + Delta;
+				Delta = Delta / 2;
+			}
+		}
 	}
 
 	//  signalEndOfSortInput
@@ -714,14 +1037,17 @@ public:
 	// 
 
 	size_t	signalEndOfSortInput() {
+		size_t			NumStores = pStoreChain->StoreCount;
 
-		//  Process merges of last into penultimate until only a single splitter remains
-		while (count() > 1) {
-			doFinalMergePass();
+		//  Perform pre-emptive merges until there is only a single store remaining
+		Stats.startFM();
+		while (pStoreChain->StoreCount > 1) {
+			doPreemptiveMerge(false);
 		}
+		Stats.finishFM(NumStores);
 
 		//  Return to caller
-		return pStore->SRANum;
+		return pStoreChain->Store[0]->SRANum;
 	}
 
 	//  signalEndOfStableSortInput
@@ -740,14 +1066,17 @@ public:
 	// 
 
 	size_t	signalEndOfStableSortInput(bool Ascending) {
+		size_t			NumStores = pStoreChain->StoreCount;
 
-		//  Process merges of last into penultimate until only a single splitter remains
-		while (count() > 1) {
-			doStableFinalMergePass(Ascending);
+		//  Perform pre-emptive merges until there is only a single store remaining
+		Stats.startFM();
+		while (pStoreChain->StoreCount > 1) {
+			doStablePreemptiveMerge(Ascending, false);
 		}
+		Stats.finishFM(NumStores);
 
 		//  Return to caller
-		return pStore->SRANum;
+		return pStoreChain->Store[0]->SRANum;
 	}
 
 	//  isOutputValid
@@ -766,7 +1095,7 @@ public:
 
 	bool	isOutputValid() {
 
-		if (RecNo != pStore->SRANum) return false;
+		if (RecNo != pStoreChain->Store[0]->SRANum) return false;
 		return true;
 	}
 
@@ -788,7 +1117,7 @@ public:
 	//  
 
 	Output lowest() {
-		return Output(&pStore->pSRA[pStore->SRALo], pStore->SRALo);
+		return Output(&pStoreChain->Store[0]->pSRA[pStoreChain->Store[0]->SRALo], pStoreChain->Store[0]->SRALo);
 	}
 
 	//  highest
@@ -805,53 +1134,8 @@ public:
 	//  
 
 	Output highest() {
-		return Output(&pStore->pSRA[pStore->SRAHi], pStore->SRAHi);
+		return Output(&pStoreChain->Store[0]->pSRA[pStoreChain->Store[0]->SRAHi], pStoreChain->Store[0]->SRAHi);
 	}
-
-	//  getCumulativePMTime
-	//
-	//  This function will return the cumulative time spent in preemptive merges
-	//
-	//  PARAMETERS:
-	//
-	//  RETURNS:
-	// 
-	//		MILLISECONDS		-		Time duration of preemptive merges (ms)
-	//
-	//  NOTES:
-	//  
-
-	xymorg::MILLISECONDS		getCumulativePMTime() { return CumPMTime; }
-
-	//  getPMCount
-	//
-	//  This function will return the count of preemptive merges performed
-	//
-	//  PARAMETERS:
-	//
-	//  RETURNS:
-	// 
-	//		size_t		-		Count of preemptive merges (PM)
-	//
-	//  NOTES:
-	//  
-
-	size_t		getPMCount() { return NumPMs; }
-
-	//  getPMStoresMerged
-	//
-	//  This function will return the count of stores merged by preemptive merges
-	//
-	//  PARAMETERS:
-	//
-	//  RETURNS:
-	// 
-	//		size_t		-		Count of stores merged by preemptive merges (PM)
-	//
-	//  NOTES:
-	//  
-
-	size_t		getPMStoresMerged() { return PMStoresMerged; }
 
 private:
 
@@ -863,111 +1147,21 @@ private:
 
 	//  Configuration
 	size_t			KL;																		//  Key Length
+	IStats& Stats;																	//  Reference to the instrumentation object
 
 	//  Preemptive Merge Controls
 	size_t			RecNo;																	//  Record counter
 	size_t			MaxStores;																//  Maximum number of splitter stores
 	size_t			MaxSInc;																//  Percentage of Max Stores
-	xymorg::MILLISECONDS	CumPMTime;														//  Cumulative preemptive merge time
 
 	//  SplitStore Chain
-	SplitStore<T>*	pStore;																	//  Pointer to the root store
-	size_t			StoreCount;																//  Splitter Store counter
-
-	//  Execution Statistics
-	size_t			NumPMs;																	//  Count of pre-emptive merges
-	size_t			PMStoresMerged;															//  Number of stores merged by PM
+	StoreChain* pStoreChain;															//  Pointer to the store chain structure
 
 	//*******************************************************************************************************************
 	//*                                                                                                                 *
 	//*   Private Functions                                                                                             *
 	//*                                                                                                                 *
 	//*******************************************************************************************************************
-
-	//  doTailPreemptiveMerge
-	//
-	//  This function will perform a preemptive merge on the current splitter store chain.
-	//  The merge pattern is always into the penultimate store on the chain.
-	//
-	//  PARAMETERS:
-	// 
-	//		size_t			-		Target number of splitters
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doTailPreemptiveMerge(size_t TargetStores) {
-		SplitStore<T>*		pCurrent = penultimate();										//  Current penultimate splitter
-		xymorg::TIMER		StartPM = xymorg::CLOCK::now();									//  Start of preemptive merge
-		xymorg::TIMER		EndPM = xymorg::CLOCK::now();									//  End of preemptive merge
-		size_t				SCount = count();												//  Current number of splitters
-
-		//  Limit check
-		if (SCount <= TargetStores) return;
-
-		//  Process Splitters until end-of-chain or target count is achieved
-		while (pCurrent->pNext != nullptr && SCount > TargetStores) {
-
-			//  Merge the following splitter into the current one
-			pCurrent->mergeNextStore();
-
-			//  Reduce the store count
-			SCount--;
-
-			//  Reposition to the penultimate
-			pCurrent = penultimate();
-		}
-
-		//  Accumulate the time spent
-		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
-
-		//  Return to caller
-		return;
-	}
-
-	//  doHeadPreemptiveMerge
-	//
-	//  This function will perform a preemptive merge on the current splitter store chain.
-	//  The merge pattern is always into the first store on the chain.
-	//
-	//  PARAMETERS:
-	// 
-	//		size_t			-		Target number of splitters
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doHeadPreemptiveMerge(size_t TargetStores) {
-		SplitStore<T>*		pCurrent = pStore;												//  Current (initially the root) splitter
-		xymorg::TIMER		StartPM = xymorg::CLOCK::now();									//  Start of preemptive merge
-		xymorg::TIMER		EndPM = xymorg::CLOCK::now();									//  End of preemptive merge
-		size_t				SCount = count();												//  Current number of splitters
-
-		//  Limit check
-		if (SCount <= TargetStores) return;
-
-		//  Process Splitters until end-of-chain or target count is achieved
-		while (pCurrent->pNext != nullptr && SCount > TargetStores) {
-
-			//  Merge the following splitter into the current one
-			pCurrent->mergeNextStore();
-
-			//  Reduce the store count
-			SCount--;
-		}
-
-		//  Accumulate the time spent
-		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
-
-		//  Return to caller
-		return;
-	}
 
 	//  doPreemptiveMerge
 	//
@@ -976,118 +1170,43 @@ private:
 	//
 	//  PARAMETERS:
 	// 
+	//		bool		-		True if this is a pre-emptive merge (false implies a final merge)
+	// 
 	//  RETURNS:
 	//
 	//  NOTES:
 	// 
 
-	void	doPreemptiveMerge() {
-		SplitStore<T>*		pCurrent = pStore;												//  Current (initially the root) splitter
-		xymorg::TIMER		StartPM = xymorg::CLOCK::now();									//  Start of preemptive merge
-		xymorg::TIMER		EndPM = xymorg::CLOCK::now();									//  End of preemptive merge
+	void	doPreemptiveMerge(bool isPreemptive) {
+		int					sIndex = 0;														//  Store index
+		int					tIndex = 0;														//  Target index
+		size_t				Stores = pStoreChain->StoreCount;								//  Current number of stores
 
-		NumPMs++;
+		if (isPreemptive) Stats.startPM();
 
-		//  Process all splitters
-		while (pCurrent->pNext != nullptr) {
+		//  Process all stores
+		while (sIndex < pStoreChain->StoreCount) {
 
 			// Merge the following splitter into the current one
-			pCurrent->mergeNextStore();
-			PMStoresMerged++;
+			if (size_t(sIndex + 1) < pStoreChain->StoreCount) {
+				pStoreChain->Store[sIndex]->mergeNextStore(pStoreChain->Store[sIndex + 1]);
+				pStoreChain->Store[sIndex + 1] = nullptr;
+				Stores--;
+			}
 
+			if (tIndex > 0) {
+				pStoreChain->Store[tIndex] = pStoreChain->Store[sIndex];
+				pStoreChain->Store[sIndex] = nullptr;
+			}
 			//  Move on to the next pair
-			pCurrent = pCurrent->pNext;
-			if (pCurrent == nullptr) break;
+			sIndex += 2;
+			tIndex++;
 		}
 
 		//  Accumulate the time spent
-		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
+		if (isPreemptive) Stats.finishPM(pStoreChain->StoreCount - Stores);
 
-		//  Return to caller
-		return;
-	}
-
-	//  doTailStablePreemptiveMerge
-	//
-	//  This function will perform a preemptive merge on the current splitter store chain.
-	//  The merge pattern is always intio the penultimate store on the chain.
-	//  This variant handles stable keys.
-	//
-	//  PARAMETERS:
-	//
-	//		bool			-		true if the sequence is ascending false if descending
-	//		size_t			-		Target number of splitters
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doTailStablePreemptiveMerge(bool Ascending, size_t TargetStores) {
-		SplitStore<T>*		pCurrent = penultimate();										//  Current penultimate splitter
-		xymorg::TIMER		StartPM = xymorg::CLOCK::now();									//  Start of preemptive merge
-		xymorg::TIMER		EndPM = xymorg::CLOCK::now();									//  End of preemptive merge
-		size_t				SCount = count();												//  Current number of splitters
-
-		//  Process all splitters until end-of-chain or target reached
-		while (pCurrent->pNext != nullptr && SCount > TargetStores) {
-
-			// Merge the following splitter into the current one
-			if (Ascending) pCurrent->mergeNextStoreAscending();
-			else pCurrent->mergeNextStoreDescending();
-
-			//  Reduce the store count
-			SCount--;
-
-			//  Reposition to the penultimate
-			pCurrent = penultimate();
-		}
-
-		//  Accumulate the time spent
-		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
-
-		//  Return to caller
-		return;
-	}
-
-	//  doHeadStablePreemptiveMerge
-	//
-	//  This function will perform a preemptive merge on the current splitter store chain.
-	//  The merge pattern is always intio the first store on the chain.
-	//  This variant handles stable keys.
-	//
-	//  PARAMETERS:
-	//
-	//		bool			-		true if the sequence is ascending false if descending
-	//		size_t			-		Target number of splitters
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doHeadStablePreemptiveMerge(bool Ascending, size_t TargetStores) {
-		SplitStore<T>*		pCurrent = pStore;												//  Current (initially the root) splitter
-		xymorg::TIMER		StartPM = xymorg::CLOCK::now();									//  Start of preemptive merge
-		xymorg::TIMER		EndPM = xymorg::CLOCK::now();									//  End of preemptive merge
-		size_t				SCount = count();												//  Current number of splitters
-
-		//  Process all splitters until end-of-chain or target reached
-		while (pCurrent->pNext != nullptr && SCount > TargetStores) {
-
-			// Merge the following splitter into the current one
-			if (Ascending) pCurrent->mergeNextStoreAscending();
-			else pCurrent->mergeNextStoreDescending();
-
-			//  Reduce the store count
-			SCount--;
-		}
-
-		//  Accumulate the time spent
-		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
+		pStoreChain->StoreCount = Stores;
 
 		//  Return to caller
 		return;
@@ -1101,214 +1220,48 @@ private:
 	//
 	//  PARAMETERS:
 	//
-	//		bool			-		true if the sequence is ascending false if descending
+	//		bool		-		true if the sequence is ascending false if descending
+	//		bool		-		True if this is a pre-emptive merge (false implies a final merge)
 	// 
 	//  RETURNS:
 	//
 	//  NOTES:
 	// 
 
-	void	doStablePreemptiveMerge(bool Ascending) {
-		SplitStore<T>*		pCurrent = pStore;												//  Current (initially the root) splitter
-		xymorg::TIMER		StartPM = xymorg::CLOCK::now();									//  Start of preemptive merge
-		xymorg::TIMER		EndPM = xymorg::CLOCK::now();									//  End of preemptive merge
+	void	doStablePreemptiveMerge(bool Ascending, bool isPreemptive) {
+		int					sIndex = 0;														//  Store index
+		int					tIndex = 0;														//  Target index
+		size_t				Stores = pStoreChain->StoreCount;								//  Current number of stores
 
-		//  Process all splitters
-		while (pCurrent->pNext != nullptr) {
+		if (isPreemptive) Stats.startPM();
+
+		//  Process all stores
+		while (sIndex < pStoreChain->StoreCount) {
 
 			// Merge the following splitter into the current one
-			if (Ascending) pCurrent->mergeNextStoreAscending();
-			else pCurrent->mergeNextStoreDescending();
+			if (size_t(sIndex + 1) < pStoreChain->StoreCount) {
+				if (Ascending) pStoreChain->Store[sIndex]->mergeNextStoreAscending(pStoreChain->Store[sIndex + 1]);
+				else pStoreChain->Store[sIndex]->mergeNextStoreDescending(pStoreChain->Store[sIndex + 1]);
+				pStoreChain->Store[sIndex + 1] = nullptr;
+				Stores--;
+			}
 
+			if (tIndex > 0) {
+				pStoreChain->Store[tIndex] = pStoreChain->Store[sIndex];
+				pStoreChain->Store[sIndex] = nullptr;
+			}
 			//  Move on to the next pair
-			pCurrent = pCurrent->pNext;
-			if (pCurrent == nullptr) break;
+			sIndex += 2;
+			tIndex++;
 		}
 
 		//  Accumulate the time spent
-		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
+		if (isPreemptive) Stats.finishPM(pStoreChain->StoreCount - Stores);
+
+		pStoreChain->StoreCount = Stores;
 
 		//  Return to caller
 		return;
-	}
-
-	//  doTailFinalMergePass
-	//
-	//  This function will perform a final merge pass on the current splitter store chain.
-	//  The merge pattern is tail first.
-	//
-	//  PARAMETERS:
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doTailFinalMergePass() {
-		SplitStore<T>* pCurrent = penultimate();												//  Current Penultimate splitter
-
-		//  Process all splitters
-		while (pCurrent->pNext != nullptr) {
-
-			// Merge the following splitter into the current one
-			pCurrent->mergeNextStore();
-
-			//  Move on to the next pair
-			pCurrent = penultimate();
-			if (pCurrent == nullptr) break;
-		}
-
-		//  Return to caller
-		return;
-	}
-
-	//  doFinalMergePass
-	//
-	//  This function will perform a final merge pass on the current splitter store chain.
-	//  The merge pattern is alternate stores are merged into theire predecessors on the chain.
-	//
-	//  PARAMETERS:
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doFinalMergePass() {
-		SplitStore<T>* pCurrent = pStore;												//  Current (initially the root) splitter
-
-		//  Process all splitters
-		while (pCurrent->pNext != nullptr) {
-
-			// Merge the following splitter into the current one
-			pCurrent->mergeNextStore();
-
-			//  Move on to the next pair
-			pCurrent = pCurrent->pNext;
-			if (pCurrent == nullptr) break;
-		}
-
-		//  Return to caller
-		return;
-	}
-
-	//  doTailStableFinalMergePass
-	//
-	//  This function will perform a final merge pass on the current splitter store chain.
-	//  The merge pattern is tail first.
-	//
-	//  PARAMETERS:
-	//
-	//		bool			-		true if the sequence is ascending false if descending
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doTailStableFinalMergePass(bool Ascending) {
-		SplitStore<T>*		pCurrent = penultimate();												//  Current penultimate splitter
-
-		//  Process all splitters
-		while (pCurrent->pNext != nullptr) {
-
-			// Merge the following splitter into the current one
-			if (Ascending) pCurrent->mergeNextStoreAscending();
-			else pCurrent->mergeNextStoreDescending();
-
-			//  Move on to the next pair
-			pCurrent = penultimate();
-			if (pCurrent == nullptr) break;
-		}
-
-		//  Return to caller
-		return;
-	}
-
-
-	//  doStableFinalMergePass
-	//
-	//  This function will perform a final merge pass on the current splitter store chain.
-	//  The merge pattern is alternate stores are merged into their predecessors on the chain.
-	//
-	//  PARAMETERS:
-	//
-	//		bool			-		true if the sequence is ascending false if descending
-	// 
-	//  RETURNS:
-	//
-	//  NOTES:
-	// 
-
-	void	doStableFinalMergePass(bool Ascending) {
-		SplitStore<T>* pCurrent = pStore;												//  Current (initially the root) splitter
-
-		//  Process all splitters
-		while (pCurrent->pNext != nullptr) {
-
-			// Merge the following splitter into the current one
-			if (Ascending) pCurrent->mergeNextStoreAscending();
-			else pCurrent->mergeNextStoreDescending();
-
-			//  Move on to the next pair
-			pCurrent = pCurrent->pNext;
-			if (pCurrent == nullptr) break;
-		}
-
-		//  Return to caller
-		return;
-	}
-
-	//  count
-	//
-	//  Returns the number of splitter stores in the splitter store chain
-	//
-	//  PARAMETERS:
-	//
-	//  RETURNS:
-	// 
-	//		size_t		-		Count of splitter stores
-	//
-	//  NOTES:
-	//  
-
-	size_t	count() {
-		SplitStore<T>* pCurrent = pStore;											//  Current splitter store
-		size_t				Count = 1;													//  Splitter store counter
-
-		//  Chase the chain counting the splitters
-		while (pCurrent->pNext != nullptr) {
-			Count++;
-			pCurrent = pCurrent->pNext;
-		}
-
-		return Count;
-	}
-
-	//  penultimate
-	//
-	//  Returns a pointer to the penultimate store on the chain
-	//
-	//  PARAMETERS:
-	//
-	//  RETURNS:
-	// 
-	//		SplitStore*		-		Pointer to the penultimate splitter stores
-	//
-	//  NOTES:
-	//  
-
-	SplitStore<T>* penultimate() {
-		SplitStore<T>* pCurrent = pStore;											//  Current splitter store
-
-		while (pCurrent->pNext != nullptr) {
-			if (pCurrent->pNext->pNext == nullptr) return pCurrent;
-			pCurrent = pCurrent->pNext;
-		}
-
-		//  SNO
-		return pStore;
 	}
 
 	//  computeMaxStores
@@ -1343,4 +1296,27 @@ private:
 		return CMS;
 	}
 
+	//  expandStoreChain
+	//
+	//  This function will add an additional 1024 stores to the store chain.
+	//
+	//  PARAMETERS:
+	// 
+	//  RETURNS:
+	//
+	//  NOTES:
+	// 
+
+	void	expandStoreChain() {
+		StoreChain* pNewStoreChain = nullptr;
+
+		pStoreChain->StoreCap += 1024;
+		pNewStoreChain = (StoreChain*)realloc(pStoreChain, sizeof(StoreChain) + ((pStoreChain->StoreCap - 4096) * sizeof(void*)));
+		if (pNewStoreChain != nullptr) pStoreChain = pNewStoreChain;
+		else {
+			std::cerr << "FATAL: Unable to reallocate the store chain structure for: " << pStoreChain->StoreCap << " stores." << std::endl;
+			std::abort();
+		}
+		return;
+	}
 };

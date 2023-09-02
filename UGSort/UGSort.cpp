@@ -2,7 +2,7 @@
 //*																													*
 //*   File:       UGSort.cpp																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.14.0	(Build: 15)																				*
+//*   Version:    1.15.0	(Build: 16)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -26,7 +26,6 @@
 //*																													*
 //*			-pm				Enables preemptive merging																*
 //*			-nopm			Disables preemptive merging																*
-//*			-spill:f		Specifies the file name of the sort work (spill) file									*
 //*			-maxrecl:l		Specifies the maximum record length (default: 16kB)										*
 //*			-inmem			Use in-memory sorting model																*
 //*			-ondisk			Use on-disk sorting model																*
@@ -62,6 +61,7 @@
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
 //*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
 //*							-	Corrected PM control parameters														*
+//*	1.15.0 -	28/08/2023	-	Binary-Chop search of Store Chain													*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -350,16 +350,6 @@ bool		establishRunConfig(UGSCfg& Config) {
 		Config.Log << "INFO: Preemptive merging is enabled." << std::endl;
 	}
 	else Config.Log << "INFO: Preemptive merging is NOT enabled." << std::endl;
-
-	//  Indicate if a spill file is available
-	if (Config.hasSortWork()) {
-		Config.RMap.mapFile(Config.getSortwork(), RealFile, MAX_PATH);
-		if (strcmp(Config.getSortwork(), RealFile) == 0) Config.Log << "INFO: Sort work (spill) file: '" << Config.getSortout() << "'." << std::endl;
-		else Config.Log << "INFO: Sort work (spill) file: '" << Config.getSortout() << "' ('" << RealFile << "')." << std::endl;
-
-		//  Update the sort work file name to hold the actual file name
-		Config.updateSortwork(RealFile);
-	}
 
 	//  Return showing success
 	return true;

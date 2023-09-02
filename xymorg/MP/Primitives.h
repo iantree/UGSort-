@@ -6,7 +6,7 @@
 //*   Version:    1.0.0	(Build: 01)																					*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2018 Hadleigh Marshall Netherlands b.v.														*
 //*******************************************************************************************************************
 //*																													*
 //*	This header file contains definitions for primitive types and classes for Multi-Processing (MP).				*
@@ -131,7 +131,7 @@ namespace xymorg {
 		//*                                                                                                                 *
 		//*******************************************************************************************************************
 
-		static const THREADID   cMutexFree = 0xFFFFFFFF;                                        //  Mutex is free
+		static const THREADID   cMutexFree = 0xFFFFFFFF;													//  Mutex is free
 
 		//*******************************************************************************************************************
 		//*                                                                                                                 *
@@ -152,7 +152,7 @@ namespace xymorg {
 
 		//  initialise
 		//
-		//  The initialise function performs an in place initialiseation of the Mutex internals.
+		//  The initialise function performs an in place initialisation of the Mutex internals.
 		//
 		//  PARAMETERS
 		//
@@ -650,13 +650,13 @@ namespace xymorg {
 		}
 
 		//  Constructor for a specific wait quantum for all values
-		SEMAPHORE(const int msWQ)
+		SEMAPHORE(const int usWQ)
 		{
 			//  Initialise the semaphore
-			initialise(msWQ, msWQ, msWQ);
+			initialise(usWQ, usWQ, usWQ);
 		}
 
-		//  Constructor for a specific wait quantum for each value
+		//  Constructor for a specific wait quantum for each value - sizes are in micro-seconds
 		SEMAPHORE(const int PWQSize, const int AWQSize, const int RWQSize)
 		{
 			//  Initialise the semaphore
@@ -720,9 +720,9 @@ namespace xymorg {
 		//
 		//  PARAMETERS
 		//
-		//        const int              -        Post wait quantum in milliseconds
-		//        const int              -        Accept wait quantum in milliseconds
-		//        const int              -        Respond wait quantum in milliseconds
+		//        const int              -        Post wait quantum in milli-seconds
+		//        const int              -        Accept wait quantum in milli-seconds
+		//        const int              -        Respond wait quantum in milli-seconds
 		//
 		//  RETURNS
 		//

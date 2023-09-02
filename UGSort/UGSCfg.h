@@ -6,7 +6,7 @@
 //*   Version:    1.5.0	(Build: 06)																					*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Hadleigh Marshall Netherlands b.v.														*
+//*   Copyright 2017 - 2023 Ian J. Tree.																			*
 //*******************************************************************************************************************
 //*	UGSCfg																											*
 //*																													*
@@ -45,11 +45,6 @@
 //*				Specifies the sort output																			*
 //*				where o is the relative file name of the sort output												*
 //*																													*
-//*			<sortwork>w</sortwork>																					*
-//*																													*
-//*				Specifies the sort working (spill) file name														*
-//*				where w is the relative file name of the sort working file											*
-//*																													*
 //*			<sortkey offset="o" length="l" ascending="true|false" descending="true|false" stable="true|false">		*
 //*			</sortkey>																								*
 //*																													*
@@ -77,7 +72,6 @@
 //*																													*
 //*			-pm				Enables preemptive merging																*
 //*			-nopm			Disables preemptive merging																*
-//*			-spill:f		Specifies the file name of the sort work (spill) file									*
 //*			-maxrecl:l		Specifies the maximum record length (default: 16kB)										*
 //*			-inmem			Use in-memory sorting model																*
 //*			-ondisk			Use on-disk sorting model																*
@@ -136,8 +130,7 @@ public:
 		ConfigValid = true;
 		InFile = NULLSTRREF;
 		OutFile = NULLSTRREF;
-		WorkFile = NULLSTRREF;
-		MaxRecl = 16 * 1024;												//  Maximum record length
+		MaxRecl = size_t(16 * 1024);										//  Maximum record length
 		SInMem = false;
 		SOnDisk = false;
 		PMEn = true;
@@ -437,61 +430,6 @@ public:
 
 	bool	isSortSequenceStable() { return KSS; }
 
-	//  hasSortWork
-	//
-	//  This function will indicate if a sortwork file has been specified
-	//
-	//	PARAMETERS:
-	//
-	//	RETURNS:
-	// 
-	//		bool		-		true if sortwork was specified, otherwise false
-	//
-	//	NOTES:
-	//
-
-	bool	hasSortWork() { if (WorkFile == NULLSTRREF) return false; return true; }
-
-	//  getSortwork
-	//
-	//  This function will return a pointer to the sort work filename specified.
-	//
-	//	PARAMETERS:
-	//
-	//	RETURNS:
-	//
-	//		char*		-		const pointer to the specified work file, nullptr if none
-	//
-	//	NOTES:
-	//
-
-	const char* getSortwork() {
-		if (WorkFile == NULLSTRREF) return nullptr;
-		return SPool.getString(WorkFile);
-	}
-
-	//  updateSortwork
-	//
-	//  This function will update the sort work filename specified.
-	//
-	//	PARAMETERS:
-	//
-	//		char*		-		const pointer to the new work file name
-	//
-	//	RETURNS:
-	//
-	//	NOTES:
-	// 
-	//		1.		Null or empty output string will not update the work file name.
-	//
-
-	void	updateSortwork(const char* NewWorkFile) {
-		if (NewWorkFile == nullptr) return;
-		if (strlen(NewWorkFile) == 0) return;
-		OutFile = SPool.replaceString(WorkFile, NewWorkFile);
-		return;
-	}
-
 	//  isPMEnabled
 	//
 	//  This function will indicate if preemptive merging is enabled
@@ -520,7 +458,6 @@ private:
 	//  Sort File Names (relative)
 	xymorg::STRREF			InFile;												//  Sort input file
 	xymorg::STRREF			OutFile;											//  Sort output file
-	xymorg::STRREF			WorkFile;											//  Sort working file (spill)
 	size_t					MaxRecl;											//  Maximum record length
 
 	bool					SInMem;												//  Sort in-memory (true) or on-disk/don't care (false)
@@ -593,10 +530,9 @@ private:
 			PMEn = SortNode.isAsserted("pm");
 		}
 
-		//  Capture the sortin, sortout and sortwork file names
+		//  Capture the sortin and sortout file names
 		InFile = captureFilename(SortNode, "sortin");
 		OutFile = captureFilename(SortNode, "sortout");
-		WorkFile = captureFilename(SortNode, "sortwork");
 
 		//  Capture the sortkey specification
 		captureSKSpec(SortNode);
@@ -657,14 +593,6 @@ private:
 
 		for (int SWX = FirstSwitch; SWX < argc; SWX++) {
 			SWValid = false;
-
-			//  Sortwork (spill) file name
-			if (strlen(argv[SWX]) > 7) {
-				if (_memicmp(argv[SWX], "-spill:", 7) == 0) {
-					WorkFile = SPool.addString(argv[SWX] + 7);
-					SWValid = true;
-				}
-			}
 
 			//  Enable preemptive merging (-pm)
 			if (strlen(argv[SWX]) == 3) {

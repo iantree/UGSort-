@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       UGSort.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.14.0	(Build: 15)																				*
+//*   Version:    1.15.0	(Build: 16)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -27,7 +27,6 @@
 //*																													*
 //*			-pm				Enables preemptive merging																*
 //*			-nopm			Disables preemptive merging																*
-//*			-spill:f		Specifies the file name of the sort work (spill) file									*
 //*			-maxrecl:l		Specifies the maximum record length (default: 16kB)										*
 //*			-inmem			Use in-memory sorting model																*
 //*			-ondisk			Use on-disk sorting model																*
@@ -63,6 +62,7 @@
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
 //*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
 //*							-	Corrected PM control parameters														*
+//*	1.15.0 -	28/08/2023	-	Binary-Chop search of Store Chain													*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -77,9 +77,9 @@
 #define		APP_NAME			"UGSort"
 #define		APP_TITLE			"UGSort Algorithm Testbed"
 #ifdef _DEBUG
-#define		APP_VERSION			"1.14.0 build: 15 Debug"
+#define		APP_VERSION			"1.15.0 build: 16 Debug"
 #else
-#define		APP_VERSION			"1.14.0 build: 15"
+#define		APP_VERSION			"1.15.0 build: 16"
 #endif
 
 //  Forward Declarations/ Function Prototypes

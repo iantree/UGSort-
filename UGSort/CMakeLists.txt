@@ -3,7 +3,7 @@
 #
 
 # Add source to this project's executable.
-add_executable (UGSort "UGSort.cpp" "UGSort.h")
+add_executable (UGSort "UGSort.cpp" "UGSort.h" "IStats.h")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET UGSort PROPERTY CXX_STANDARD 20)

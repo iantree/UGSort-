@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       xymorg.h																							*
 //*   Suite:      xymorg Integration																				*
-//*   Version:    3.5.1	(Build: 27) - Dev Build:  XDB-047															*
+//*   Version:    3.5.2	(Build: 43) - Dev Build:  XDB-051															*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -32,7 +32,7 @@
 //*																													*
 //*	NOTES:																											*
 //*																													*
-//*	1.		This is a minimal subset clone of xymorg supporting only MP extensions.									*																										*
+//*	1.		This is a minimal subset clone of xymorg supporting NO extensions.										*																										*
 //*																													*
 //*******************************************************************************************************************
 //*																													*
@@ -40,6 +40,7 @@
 //*																													*
 //*	3.5.0 -	02/03/2020	-	Version rebased to origin 3.5															*
 //* 3.5.1 -	12/05/2020	-	Minimal Subset generated																*	
+//* 3.5.2 -	20/08/2023	-	Minimal Subset regenerated																*	
 //*																													*
 //*******************************************************************************************************************/
 
@@ -52,11 +53,3 @@
 #include	"consts.h"																		//  xymorg constant definitions
 #include	"AppConfig.h"																	//  xymorg Application Configuration Singleton
 
-//
-//  If the Multi-Programming (MP) sub-system is required then then include the necessary headers
-//
-#ifdef XY_NEEDS_MP																			//  MP  -  Multi-Programming (MP)
-#include	"MP/Primitives.h"																//  Primitives for multi-programming
-#include	"MP/Task.h"																		//  Task and related classes
-#include	"MP/Dispatcher.h"																//  Multi-programming dispatcher
-#endif																						//  End - MP
