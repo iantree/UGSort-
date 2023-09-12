@@ -180,19 +180,19 @@ public:
 
 		//  Compute all phase times
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndLoad - StartLoad);
-		LoadPhase = PhaseTime.count();
-		PMPhase = CumPMTime.count();
+		LoadPhase = size_t(PhaseTime.count());
+		PMPhase = size_t(CumPMTime.count());
 		//  Note: Input time is computed as the duration of the phase less the cumulative Pre-emptive Merge duration
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndInput - StartInput);
-		InputPhase = PhaseTime.count() - PMPhase;
+		InputPhase = size_t(PhaseTime.count()) - PMPhase;
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndMerge - StartMerge);
-		FMPhase = PhaseTime.count();
+		FMPhase = size_t(PhaseTime.count());
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndOut - StartOut);
-		OutputPhase = PhaseTime.count();
+		OutputPhase = size_t(PhaseTime.count());
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndSort - StartSort);
-		SortPhase = PhaseTime.count();
+		SortPhase = size_t(PhaseTime.count());
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndStore - StartStore);
-		StorePhase = PhaseTime.count();
+		StorePhase = size_t(PhaseTime.count());
 
 		//  Compute the sort rate (kps)
 		if (SortPhase > 0) {

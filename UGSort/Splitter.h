@@ -465,7 +465,7 @@ public:
 		//  Destroy the SplitStore chain (if it exists)
 
 		if (pStoreChain != nullptr) {
-			for (int sIndex = 0; sIndex < pStoreChain->StoreCount; sIndex++) delete pStoreChain->Store[sIndex];
+			for (size_t sIndex = 0; sIndex < pStoreChain->StoreCount; sIndex++) delete pStoreChain->Store[sIndex];
 			delete pStoreChain;
 		}
 		pStoreChain = nullptr;
@@ -1185,7 +1185,7 @@ private:
 		if (isPreemptive) Stats.startPM();
 
 		//  Process all stores
-		while (sIndex < pStoreChain->StoreCount) {
+		while (size_t(sIndex) < pStoreChain->StoreCount) {
 
 			// Merge the following splitter into the current one
 			if (size_t(sIndex + 1) < pStoreChain->StoreCount) {
@@ -1236,7 +1236,7 @@ private:
 		if (isPreemptive) Stats.startPM();
 
 		//  Process all stores
-		while (sIndex < pStoreChain->StoreCount) {
+		while (size_t(sIndex) < pStoreChain->StoreCount) {
 
 			// Merge the following splitter into the current one
 			if (size_t(sIndex + 1) < pStoreChain->StoreCount) {
