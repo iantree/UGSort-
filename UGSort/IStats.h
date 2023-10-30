@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       IStats.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.15.0	(Build: 16)																				*
+//*   Version:    1.16.1	(Build: 18)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -20,6 +20,7 @@
 //*																													*
 //*   History:																										*
 //*	1.15.0 -	10/08/2023	-	Initial Version																		*
+//*	1.16.1 -	19/10/2023	-	Increase PM timer resolution														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -168,7 +169,7 @@ public:
 	}
 	void		finishPM(size_t NSM) {
 		EndPM = xymorg::CLOCK::now();
-		CumPMTime += DURATION(xymorg::MILLISECONDS, EndPM - StartPM);
+		CumPMTime += DURATION(xymorg::MICROSECONDS, EndPM - StartPM);
 		PMStoresMerged += NSM;
 		return;
 	}
@@ -181,7 +182,7 @@ public:
 		//  Compute all phase times
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndLoad - StartLoad);
 		LoadPhase = size_t(PhaseTime.count());
-		PMPhase = size_t(CumPMTime.count());
+		PMPhase = size_t(CumPMTime.count()) / 1000;
 		//  Note: Input time is computed as the duration of the phase less the cumulative Pre-emptive Merge duration
 		PhaseTime = DURATION(xymorg::MILLISECONDS, EndInput - StartInput);
 		InputPhase = size_t(PhaseTime.count()) - PMPhase;
@@ -271,6 +272,6 @@ private:
 
 	xymorg::TIMER			StartPM;											//  Start Pre-emptive Merge
 	xymorg::TIMER			EndPM;												//  End Pre-emptive Merge
-	xymorg::MILLISECONDS	CumPMTime;											//  Cumulative Pre-emptive Merge duration
+	xymorg::MICROSECONDS	CumPMTime;											//  Cumulative Pre-emptive Merge duration
 
 };

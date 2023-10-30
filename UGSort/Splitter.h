@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       Splitter.h																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.15.0	(Build: 16)																				*
+//*   Version:    1.16.0	(Build: 17)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -41,6 +41,7 @@
 //*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
 //*							-	Corrected PM control parameters														*
 //*	1.15.0 -	25/08/2023	-	Binary-Chop search of Store Chain													*
+//*	1.16.0 -	16/10/2023	-	Improved PM handling of Worst Case (Tail-Suppression)								*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -395,7 +396,7 @@ public:
 		//  Initialise the Preemptive Merge controls
 		RecNo = 1;
 		MaxStores = 100;
-		MaxSInc = 100;
+		MaxSInc = 25;
 
 		//  Return to caller
 		return;
@@ -437,7 +438,7 @@ public:
 		//  Initialise the Preemptive Merge controls
 		RecNo = 1;
 		MaxStores = 100;
-		MaxSInc = 100;
+		MaxSInc = 25;
 
 		//  Return to caller
 		return;
@@ -541,7 +542,7 @@ public:
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
-					doPreemptiveMerge(true);
+					suppressTail();
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
 
@@ -675,7 +676,7 @@ public:
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
-					doPreemptiveMerge(true);
+					suppressTail();
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
 
@@ -813,7 +814,7 @@ public:
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
-					doStablePreemptiveMerge(Ascending, true);
+					suppressStableTail(Ascending);
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
 
@@ -946,7 +947,7 @@ public:
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
-					doStablePreemptiveMerge(Ascending, true);
+					suppressStableTail(Ascending);
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
 
@@ -1042,7 +1043,7 @@ public:
 		//  Perform pre-emptive merges until there is only a single store remaining
 		Stats.startFM();
 		while (pStoreChain->StoreCount > 1) {
-			doPreemptiveMerge(false);
+			doAlternateMerge();
 		}
 		Stats.finishFM(NumStores);
 
@@ -1071,7 +1072,7 @@ public:
 		//  Perform pre-emptive merges until there is only a single store remaining
 		Stats.startFM();
 		while (pStoreChain->StoreCount > 1) {
-			doStablePreemptiveMerge(Ascending, false);
+			doStableAlternateMerge(Ascending);
 		}
 		Stats.finishFM(NumStores);
 
@@ -1163,26 +1164,97 @@ private:
 	//*                                                                                                                 *
 	//*******************************************************************************************************************
 
-	//  doPreemptiveMerge
+	//  suppressTail
 	//
 	//  This function will perform a preemptive merge on the current splitter store chain.
-	//  The merge pattern is alternate stores are merged into their predecessors on the chain.
+	//  The merge pattern sweeps up stores from the tail merging 10% of the total store chain.
 	//
 	//  PARAMETERS:
-	// 
-	//		bool		-		True if this is a pre-emptive merge (false implies a final merge)
 	// 
 	//  RETURNS:
 	//
 	//  NOTES:
 	// 
 
-	void	doPreemptiveMerge(bool isPreemptive) {
+	void	suppressTail() {
+		size_t				Stores = pStoreChain->StoreCount;								//  Current number of stores
+		size_t				Target = (Stores * 9) / 10;										//  90% of existing stores
+
+		//  Record start time
+		Stats.startPM();
+
+		//  Eliminate the ultimate store until the target number of stores is reached
+		while (Stores > Target) {
+			pStoreChain->Store[Stores - 2]->mergeNextStore(pStoreChain->Store[Stores - 1]);
+			pStoreChain->Store[Stores - 1] = nullptr;
+			Stores--;
+		}
+
+		//  Accumulate the time spent
+		Stats.finishPM(pStoreChain->StoreCount - Stores);
+
+		//  Update the store count
+		pStoreChain->StoreCount = Stores;
+
+		//  Return to caller
+		return;
+	}
+
+	//  suppressStableTail
+	//
+	//  This function will perform a preemptive stable merge on the current splitter store chain.
+	//  The merge pattern sweeps up stores from the tail merging 10% of the total store chain.
+	//
+	//  PARAMETERS:
+	//
+	//		bool		-		true if the sequence is ascending false if descending
+	// 
+	//  RETURNS:
+	//
+	//  NOTES:
+	// 
+
+	void	suppressStableTail(bool Ascending) {
+		size_t				Stores = pStoreChain->StoreCount;								//  Current number of stores
+		size_t				Target = (Stores * 9) / 10;										//  90% of existing stores
+
+		//  Record start time
+		Stats.startPM();
+
+		//  Eliminate the ultimate store until the target number of stores is reached
+		while (Stores > Target) {
+			if (Ascending) pStoreChain->Store[Stores - 1]->mergeNextStoreAscending(pStoreChain->Store[Stores - 1]);
+			else pStoreChain->Store[Stores - 2]->mergeNextStoreDescending(pStoreChain->Store[Stores - 1]);
+			pStoreChain->Store[Stores - 1] = nullptr;
+			Stores--;
+		}
+
+		//  Accumulate the time spent
+		Stats.finishPM(pStoreChain->StoreCount - Stores);
+
+		//  Update the store count
+		pStoreChain->StoreCount = Stores;
+
+		//  Return to caller
+		return;
+	}
+
+	//  doAlternateMerge
+	//
+	//  This function will perform a final merge on the current splitter store chain.
+	//  The merge pattern is alternate stores are merged into their predecessors on the chain.
+	//
+	//  PARAMETERS:
+	// 
+	//  RETURNS:
+	//
+	//  NOTES:
+	// 
+
+	void	doAlternateMerge() {
 		int					sIndex = 0;														//  Store index
 		int					tIndex = 0;														//  Target index
 		size_t				Stores = pStoreChain->StoreCount;								//  Current number of stores
-
-		if (isPreemptive) Stats.startPM();
 
 		//  Process all stores
 		while (size_t(sIndex) < pStoreChain->StoreCount) {
@@ -1203,37 +1275,31 @@ private:
 			tIndex++;
 		}
 
-		//  Accumulate the time spent
-		if (isPreemptive) Stats.finishPM(pStoreChain->StoreCount - Stores);
-
 		pStoreChain->StoreCount = Stores;
 
 		//  Return to caller
 		return;
 	}
 
-	//  doStablePreemptiveMerge
+	//  doStableAlternateMerge
 	//
-	//  This function will perform a preemptive merge on the current splitter store chain.
+	//  This function will perform a final merge on the current splitter store chain.
 	//  The merge pattern is alternate stores are merged into theire predecessors on the chain.
 	//  This variant handles stable keys.
 	//
 	//  PARAMETERS:
 	//
 	//		bool		-		true if the sequence is ascending false if descending
-	//		bool		-		True if this is a pre-emptive merge (false implies a final merge)
 	// 
 	//  RETURNS:
 	//
 	//  NOTES:
 	// 
 
-	void	doStablePreemptiveMerge(bool Ascending, bool isPreemptive) {
+	void	doStableAlternateMerge(bool Ascending) {
 		int					sIndex = 0;														//  Store index
 		int					tIndex = 0;														//  Target index
 		size_t				Stores = pStoreChain->StoreCount;								//  Current number of stores
-
-		if (isPreemptive) Stats.startPM();
 
 		//  Process all stores
 		while (size_t(sIndex) < pStoreChain->StoreCount) {
@@ -1254,9 +1320,6 @@ private:
 			sIndex += 2;
 			tIndex++;
 		}
-
-		//  Accumulate the time spent
-		if (isPreemptive) Stats.finishPM(pStoreChain->StoreCount - Stores);
 
 		pStoreChain->StoreCount = Stores;
 
