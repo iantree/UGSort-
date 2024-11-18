@@ -1,4 +1,4 @@
-#pragma once
+#pragma	once
 //
 //  (C++) Lanuage and Platform Base Includes
 //
@@ -35,18 +35,19 @@
 //
 //  UNIX/LINUX ONLY:
 //
-//  We set __STDC_WANT_LIB_EXT1__ to 1 this surfaces the bounds checked (_s) variants of functions where/if available
+//  We set __STDC_WANT_LIB_EXT1__ to 1 this sufaces the bounds checked (_s) variants of functions where/if available
 //
 #else
 //    USE the builtin regex for g++ >= 4.9
 #if (__GNUC__ > 4)
-define _LPB_USE_BUILTIN_REGEX
+#define _LPB_USE_BUILTIN_REGEX
 #endif
 #if (__GNUC__ == 4) && (__GNUC_MINOR__ >= 9)
-define _LPB_USE_BUILTIN_REGE
+#define _LPB_USE_BUILTIN_REGE
 #endif
 #define		__STDC_WANT_LIB_EXT1__		1
-#include	<cstdlib>																			//  Basic c++ definitions and functions
+#include	<cstddef>																			//  Basic c++ definitions
+#include	<cstdlib>																			//  Basic c++ functions
 #include	<stdint.h>																			//  Standard Integer definitions
 #include	<cstdarg>																			//  Standard Arguments
 #include	<cmath>																				//  Mathematics functions
@@ -112,7 +113,7 @@ define _LPB_USE_BUILTIN_REGE
 #pragma message("Building for: UNIX/Linux 32bit with __STDC_LIB_EXT1__ extensions Release.")
 #endif
 #else
-//  Boiunds checking extensions NOT available
+//  Bounds checking extensions NOT available
 #if (defined(_DEBUG))
 #pragma message("Building for: UNIX/Linux 32bit Debugging.")
 #else
@@ -161,7 +162,7 @@ define _LPB_USE_BUILTIN_REGE
 #define		WIN32_LEAN_AND_MEAN																	//  Exclude rarely-used parts of windows headers
 #include	<windows.h>
 #include	<shellapi.h>																		//  Shell API functions
-
+						
 //  Include the emulation for the POSIX strptime functions
 #include	"WINDOWS/strptime.h"
 
@@ -215,8 +216,8 @@ define _LPB_USE_BUILTIN_REGE
 //
 //		tm *					-		Pointer to the populated tm structure or nullptr if the call fails
 //
-struct tm* localtime_safe(const time_t*, struct tm*);
-inline struct tm* localtime_safe(const time_t* time, struct tm* result) {
+struct tm* localtime_safe(const time_t *, struct tm *);
+inline struct tm* localtime_safe(const time_t *time, struct tm *result) {
 	if (localtime_s(result, time) == 0) return result;
 	else return nullptr;
 }
@@ -238,11 +239,11 @@ inline struct tm* localtime_safe(const time_t* time, struct tm* result) {
 //
 //  RETURNS:
 //
-//		tm *					-		Pointer to the populated tm structure or NULL if the call failes
+//		tm *					-		Pointer to the populated tm structure or NULL if the call fails
 //
-struct tm* localtime_safe(const time_t*, struct tm*);
-inline struct tm* localtime_safe(const time_t* time, struct tm* result) {
-	struct tm* p_tm = nullptr;
+struct tm* localtime_safe(const time_t *, struct tm *);
+inline struct tm* localtime_safe(const time_t *time, struct tm *result) {
+	struct tm *p_tm = nullptr;
 	memset(result, 0xFF, sizeof(tm));
 	p_tm = localtime(time);
 	if (p_tm == nullptr) return nullptr;
@@ -265,7 +266,7 @@ inline struct tm* localtime_safe(const time_t* time, struct tm* result) {
 //		errno_t					-		0 on success otherwise error code (always ENOENT)
 //
 errno_t fopen_s(FILE**, const char*, const char*);
-inline errno_t fopen_s(FILE** pRetH, const char* szFN, const char* szMode) {
+inline errno_t fopen_s(FILE **pRetH, const char *szFN, const char *szMode) {
 	*pRetH = nullptr;
 	*pRetH = fopen(szFN, szMode);
 	if (*pRetH == nullptr) return ENOENT;
@@ -321,9 +322,9 @@ inline errno_t fopen_s(FILE** pRetH, const char* szFN, const char* szMode) {
 //
 //		tm *					-		Pointer to the populated tm structure or NULL if the call failes
 //
-struct tm* localtime_safe(const time_t*, struct tm*);
-inline struct tm* localtime_safe(const time_t* time, struct tm* result) {
-	struct tm* p_tm = nullptr;
+struct tm* localtime_safe(const time_t *, struct tm *);
+inline struct tm* localtime_safe(const time_t *time, struct tm *result) {
+	struct tm *p_tm = nullptr;
 	memset(result, 0xFF, sizeof(tm));
 	p_tm = localtime(time);
 	if (p_tm == nullptr) return nullptr;
@@ -346,7 +347,7 @@ inline struct tm* localtime_safe(const time_t* time, struct tm* result) {
 //		errno_t					-		0 on success otherwise error code (always ENOENT)
 //
 errno_t fopen_s(FILE**, const char*, const char*);
-inline errno_t fopen_s(FILE** pRetH, const char* szFN, const char* szMode) {
+inline errno_t fopen_s(FILE **pRetH, const char *szFN, const char *szMode) {
 	*pRetH = nullptr;
 	*pRetH = fopen(szFN, szMode);
 	if (*pRetH == nullptr) return ENOENT;
@@ -368,13 +369,13 @@ inline errno_t fopen_s(FILE** pRetH, const char* szFN, const char* szMode) {
 //		errno_t					-		0 on success otherwise error code (always ENOENT)
 //
 errno_t _depenv_s(char**, size_t*, const char*);
-inline errno_t _dupenv_s(char** pRetVal, size_t* pRetLen, const char* VarName) {
-	char* pRV = getenv(VarName);
+inline errno_t _dupenv_s(char **pRetVal, size_t *pRetLen, const char* VarName) {
+	char		*pRV = getenv(VarName);
 
 	*pRetVal = nullptr;
 	if (pRetLen != nullptr) *pRetLen = 0;
 	if (pRV == nullptr) return ENOENT;
-	*pRetVal = (char*)malloc(strlen(pRV) + 1);
+	*pRetVal = (char *) malloc(strlen(pRV) + 1);
 	if (*pRetVal == nullptr) return ENOENT;
 	strcpy(*pRetVal, pRV);
 	if (pRetLen != nullptr) *pRetLen = strlen(pRV);
@@ -400,3 +401,4 @@ inline errno_t _dupenv_s(char** pRetVal, size_t* pRetLen, const char* VarName) {
 #define		_memicmp(s,c,l)		strncasecmp(s,c,l)
 #endif
 #endif
+

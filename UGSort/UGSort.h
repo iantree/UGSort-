@@ -3,7 +3,7 @@
 //*																													*
 //*   File:       UGSort.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.16.1	(Build: 18)																				*
+//*   Version:    1.16.2	(Build: 19)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
 //*   Copyright 2017 - 2023 Ian J. Tree																				*
@@ -65,6 +65,7 @@
 //*	1.15.0 -	28/08/2023	-	Binary-Chop search of Store Chain													*
 //*	1.16.0 -	16/10/2023	-	Improved PM handling of Worst Case (Tail-Suppression)								*
 //*	1.16.1 -	19/10/2023	-	Increase PM timer resolution														*
+//*	1.16.2 -	18/11/2024	-	Headers sanitized for gcc 8.5														*
 //*																													*
 //*******************************************************************************************************************/
 
