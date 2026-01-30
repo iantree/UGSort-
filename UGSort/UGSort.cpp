@@ -2,10 +2,10 @@
 //*																													*
 //*   File:       UGSort.cpp																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.16.2	(Build: 19)																				*
+//*   Version:    1.17.0	(Build: 20)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2026 Ian J. Tree																				*
 //*******************************************************************************************************************
 //*	UGSort																											*
 //*																													*
@@ -65,6 +65,7 @@
 //*	1.16.0 -	16/10/2023	-	Improved PM handling of Worst Case (Tail-Suppression)								*
 //*	1.16.1 -	19/10/2023	-	Increase PM timer resolution														*
 //*	1.16.2 -	18/11/2024	-	Headers sanitized for gcc 8.5														*
+//*	1.17.0 -	28/01/2026	-	Include instrumentation package														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -147,12 +148,31 @@ int main(int argc, char* argv[])
 bool	performSplitSort(UGSCfg& Config) {
 	std::ofstream			Sortout;																//  Sort output stream
 	Sorter					SWiz(Config.Log);														//  Sorting Wizzard
+	//  Instrumentation Statistics Object
+	IStats					Stats;
 
 	//  Determine the run configuration
 	if (!establishRunConfig(Config)) {
 		Config.Log << "ERROR: Unable to establish a valid run configuration, see previous message(s)." << std::endl;
 		return false;
 	}
+
+	//  For an instrumented build setup the requested instruments
+#ifdef INSTRUMENTED
+
+	//  Enable the pile-up instrument
+	if (Config.getInstruments() & INSTRUMENT_PILEUP) Stats.activatePileUpInstrument(Config.getPileupIFN());
+
+	//  Enable the merge instrument
+	if (Config.getInstruments() & INSTRUMENT_MERGE) Stats.activateMergeInstrument(Config.getMergeIFN());
+
+	//  Enable the insert instrument
+	if (Config.getInstruments() & INSTRUMENT_INSERT) Stats.activateInsertInstrument(Config.getInsertIFN());
+
+	//  Set the instrumentation controls
+	Stats.setInstrumentationControls(Config.getStatsInterval());
+
+#endif
 
 	//  Enable Notifications and Timings in the Sort Wizzard
 	SWiz.enableNotifications();
@@ -175,10 +195,13 @@ bool	performSplitSort(UGSCfg& Config) {
 			Config.getSortKeyOffset(),
 			Config.getSortKeyLength(),
 			Config.isSortSequenceAscending(),
-			Config.isPMEnabled())) {
+			Config.isPMEnabled(), Stats)) {
 			Config.Log << "INFO: The sort operation has completed." << std::endl;
 		}
 		else {
+#ifdef INSTRUMENTED
+			Stats.deactivateInstruments();
+#endif
 			//  Sort failed
 			return false;
 		}
@@ -191,14 +214,21 @@ bool	performSplitSort(UGSCfg& Config) {
 			Config.getSortKeyOffset(),
 			Config.getSortKeyLength(),
 			Config.isSortSequenceAscending(),
-			Config.isPMEnabled())) {
+			Config.isPMEnabled(), Stats)) {
 			Config.Log << "INFO: The sort operation has completed." << std::endl;
 		}
 		else {
+#ifdef INSTRUMENTED
+			Stats.deactivateInstruments();
+#endif
 			//  Sort failed
 			return false;
 		}
 	}
+
+#ifdef INSTRUMENTED
+	Stats.deactivateInstruments();
+#endif
 
 	//  Return to caller showing sort completed successfully
 	return true;
@@ -223,12 +253,31 @@ bool	performSplitSort(UGSCfg& Config) {
 bool	performStableSplitSort(UGSCfg& Config) {
 	std::ofstream			Sortout;																//  Sort output stream
 	Sorter					SWiz(Config.Log);														//  Sorting Wizzard
+	//  Instrumentation Statistics Object
+	IStats					Stats;
 
 	//  Determine the run configuration
 	if (!establishRunConfig(Config)) {
 		Config.Log << "ERROR: Unable to establish a valid run configuration, see previous message(s)." << std::endl;
 		return false;
 	}
+
+	//  For an instrumented build setup the requested instruments
+#ifdef INSTRUMENTED
+
+	//  Enable the pile-up instrument
+	if (Config.getInstruments() & INSTRUMENT_PILEUP) Stats.activatePileUpInstrument(Config.getPileupIFN());
+
+	//  Enable the merge instrument
+	if (Config.getInstruments() & INSTRUMENT_MERGE) Stats.activateMergeInstrument(Config.getMergeIFN());
+
+	//  Enable the insert instrument
+	if (Config.getInstruments() & INSTRUMENT_INSERT) Stats.activateInsertInstrument(Config.getInsertIFN());
+
+	//  Set the instrumentation controls
+	Stats.setInstrumentationControls(Config.getStatsInterval());
+
+#endif
 
 	//  Enable Notifications and Timings in the Sort Wizzard
 	SWiz.enableNotifications();
@@ -251,10 +300,13 @@ bool	performStableSplitSort(UGSCfg& Config) {
 			Config.getSortKeyOffset(),
 			Config.getSortKeyLength(),
 			Config.isSortSequenceAscending(),
-			Config.isPMEnabled())) {
+			Config.isPMEnabled(), Stats)) {
 			Config.Log << "INFO: The sort operation has completed." << std::endl;
 		}
 		else {
+#ifdef INSTRUMENTED
+			Stats.deactivateInstruments();
+#endif
 			//  Sort failed
 			return false;
 		}
@@ -267,14 +319,21 @@ bool	performStableSplitSort(UGSCfg& Config) {
 			Config.getSortKeyOffset(),
 			Config.getSortKeyLength(),
 			Config.isSortSequenceAscending(),
-			Config.isPMEnabled())) {
+			Config.isPMEnabled(), Stats)) {
 			Config.Log << "INFO: The sort operation has completed." << std::endl;
 		}
 		else {
+#ifdef INSTRUMENTED
+			Stats.deactivateInstruments();
+#endif
 			//  Sort failed
 			return false;
 		}
 	}
+
+#ifdef INSTRUMENTED
+	Stats.deactivateInstruments();
+#endif
 
 	//  Return to caller showing sort completed successfully
 	return true;
@@ -353,6 +412,45 @@ bool		establishRunConfig(UGSCfg& Config) {
 		Config.Log << "INFO: Preemptive merging is enabled." << std::endl;
 	}
 	else Config.Log << "INFO: Preemptive merging is NOT enabled." << std::endl;
+
+#ifdef INSTRUMENTED
+	//  Determine if there is a valid pile-up instrument file, if so update the file name (from relative to actual)
+	if (Config.getInstruments() & INSTRUMENT_PILEUP) {
+		Config.RMap.mapFile(Config.getPileupIFN(), RealFile, MAX_PATH);
+
+		//  Report the instrument output file name
+		Config.Log << "INFO: Pile-Up instrument output file: '" << Config.getPileupIFN() << "' ('" << RealFile << "')." << std::endl;
+
+		//  Update the pile-up instrument file name to hold the actual file name
+		Config.updatePileupIFN(RealFile);
+	}
+
+	//  Determine if there is a valid merge instrument file, if so update the file name (from relative to actual)
+	if (Config.getInstruments() & INSTRUMENT_MERGE) {
+		Config.RMap.mapFile(Config.getMergeIFN(), RealFile, MAX_PATH);
+
+		//  Report the instrument output file name
+		Config.Log << "INFO: Merge instrument output file: '" << Config.getMergeIFN() << "' ('" << RealFile << "')." << std::endl;
+
+		//  Update the merge instrument file name to hold the actual file name
+		Config.updateMergeIFN(RealFile);
+	}
+
+	//  Determine if there is a valid insert instrument file, if so update the file name (from relative to actual)
+	if (Config.getInstruments() & INSTRUMENT_INSERT) {
+		Config.RMap.mapFile(Config.getInsertIFN(), RealFile, MAX_PATH);
+
+		//  Report the instrument output file name
+		Config.Log << "INFO: Insert instrument output file: '" << Config.getInsertIFN() << "' ('" << RealFile << "')." << std::endl;
+
+		//  Update the Insert instrument file name to hold the actual file name
+		Config.updateInsertIFN(RealFile);
+	}
+
+	//  Report the instrumentation reporting interval
+	Config.Log << "INFO: The instrumentation reporting interval is: " << Config.getStatsInterval() << " keys." << std::endl;
+
+#endif
 
 	//  Return showing success
 	return true;

@@ -3,10 +3,10 @@
 //*																													*
 //*   File:       UGSCfg.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.5.0	(Build: 06)																					*
+//*   Version:    1.17.0	(Build: 20)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree.																			*
+//*   Copyright 2017 - 2026 Ian J. Tree.																			*
 //*******************************************************************************************************************
 //*	UGSCfg																											*
 //*																													*
@@ -48,6 +48,27 @@
 //*			<sortkey offset="o" length="l" ascending="true|false" descending="true|false" stable="true|false">		*
 //*			</sortkey>																								*
 //*																													*
+//*		NOTE: The following section is only avaiable if the application is compiled with the INSTRUMENTED 			*
+//*			  symbol defined.																						*
+//*																													*
+//*			<instruments interval="c">																				*
+//*																													*
+//*				Where c is the number of keys interval between stats collections.									*																									*
+//*																													*
+//*				<pileup>p</pileup>																					*
+//*																													*
+//*					Specifies that pile-up statistics are to be collected in the file "p".							*
+//*																													*
+//*				<merge>m</merge>																					*
+//*																													*
+//*					Specifies that merge operation statistics are to be collected in the file "m".					*
+//*																													*
+//*				<insert>i</insert>																					*
+//*																													*
+//*					Specifies that insert operation statistics are to be collected in the file "i".					*
+//*																													*
+//*			</instruments>																							*
+//*																													*
 //*				Specifies the sort key - Optional																	*
 //*				where o is the offset in the record to the sort key													*
 //*				where l is the length of the sort key																*
@@ -88,11 +109,15 @@
 //*	1.0.0 -		04/12/2022	-	Initial Release																		*
 //*	1.3.0 -		08/03/2023	-	Adaptive PM																			*
 //*	1.5.0 -		13/03/2023	-	SS3 structure changes																*
+//*	1.17.0 -	28/01/2026	-	Include instrumentation package														*
 //*																													*
 //*******************************************************************************************************************/
 
 //  Include xymorg headers
 #include	"../xymorg/xymorg.h"															//  xymorg system headers
+
+//  Application headers
+#include	"IStats.h"
 
 constexpr		size_t		DEFAULT_SORTKEY_LENGTH = 32;									//  Default sort key length
 
@@ -138,6 +163,13 @@ public:
 		SKOff = 0;															//  Key Offset is start of record
 		SKLen = 0;															//  Key length MUST be specified
 		KSS = false;														//  Record sequence is NOT maintained for identical keys
+#ifdef INSTRUMENTED
+		Instruments = 0;													//  No instruments active
+		Interval = 0;														//  Reporting interval
+		PUFN = NULLSTRREF;													//  No Pile-Up file
+		MEFN = NULLSTRREF;													//  No Merge file
+		ISFN = NULLSTRREF;													//  No Insert file
+#endif
 
 		//  Handle the local application configuration settings
 		if (pCfgImg == nullptr) handleNoConfig();
@@ -202,7 +234,7 @@ public:
 	//	NOTES:
 	//
 
-	bool		isValid() { return ConfigValid; }
+	bool		isValid() const { return ConfigValid; }
 
 	//  getSortin
 	//
@@ -297,7 +329,7 @@ public:
 	//	NOTES:
 	//
 
-	size_t	getMaxRecl() { return MaxRecl; }
+	size_t	getMaxRecl() const { return MaxRecl; }
 
 	//  isModelSpecified
 	//
@@ -312,7 +344,7 @@ public:
 	//	NOTES:
 	//
 
-	bool	isModelSpecified() { return SInMem || SOnDisk; }
+	bool	isModelSpecified() const { return SInMem || SOnDisk; }
 
 	//  isModelInMemory
 	//
@@ -327,7 +359,7 @@ public:
 	//	NOTES:
 	//
 
-	bool	isModelInMemory() { return SInMem; }
+	bool	isModelInMemory() const { return SInMem; }
 
 	//  isModelOnDisk
 	//
@@ -342,7 +374,7 @@ public:
 	//	NOTES:
 	//
 
-	bool	isModelOnDisk() { return SOnDisk; }
+	bool	isModelOnDisk() const { return SOnDisk; }
 
 	//  setInMemoryModel
 	//
@@ -383,7 +415,7 @@ public:
 	//	NOTES:
 	//
 
-	size_t	getSortKeyLength() { return SKLen; }
+	size_t	getSortKeyLength() const { return SKLen; }
 
 	//  getSortKeyOffset
 	//
@@ -398,7 +430,7 @@ public:
 	//	NOTES:
 	//
 
-	size_t	getSortKeyOffset() { return SKOff; }
+	size_t	getSortKeyOffset() const { return SKOff; }
 
 	//  isSortSequenceAscending
 	//
@@ -413,7 +445,7 @@ public:
 	//	NOTES:
 	//
 
-	bool	isSortSequenceAscending() { return SSA; }
+	bool	isSortSequenceAscending() const { return SSA; }
 
 	//  isSortSequenceStable
 	//
@@ -428,7 +460,7 @@ public:
 	//	NOTES:
 	//
 
-	bool	isSortSequenceStable() { return KSS; }
+	bool	isSortSequenceStable() const { return KSS; }
 
 	//  isPMEnabled
 	//
@@ -443,7 +475,164 @@ public:
 	//	NOTES:
 	//
 
-	bool	isPMEnabled() { return PMEn; }
+	bool	isPMEnabled() const { return PMEn; }
+
+	//  
+	//  The following functions are ONLY available if the INSTRUMENTED pre-processor symbol is defined
+	//
+
+#ifdef INSTRUMENTED
+
+	//  getInstruments
+	//
+	//  This function will return the array of flags indicating which instruments are enabled.
+	//
+	//	PARAMETERS:
+	//
+	//	RETURNS:
+	// 
+	//		SWITCHES		-		Array of instrument enabled flags
+	//
+	//	NOTES:
+	//
+
+	xymorg::SWITCHES		getInstruments() const { return Instruments; }
+
+	//  getStatsInterval
+	//
+	//  This function will return the statistics reporting interval.
+	//
+	//	PARAMETERS:
+	//
+	//	RETURNS:
+	// 
+	//		int		-		The statistics reporting interval
+	//
+	//	NOTES:
+	//
+
+	int			getStatsInterval() const { return Interval; }
+
+	//  getPileupIFN
+	//
+	//  This function will return a pointer to the pile-up instrument output filename specified.
+	//
+	//	PARAMETERS:
+	//
+	//	RETURNS:
+	//
+	//		char*		-		const pointer to the specified pile-up instrument output file, nullptr if none
+	//
+	//	NOTES:
+	//
+
+	const char* getPileupIFN() {
+		if (PUFN == NULLSTRREF) return nullptr;
+		return SPool.getString(PUFN);
+	}
+
+	//  updatePileupIFN
+	//
+	//  This function will update the pile-up instrument output filename specified.
+	//
+	//	PARAMETERS:
+	//
+	//		char*		-		const pointer to the new output file name
+	//
+	//	RETURNS:
+	//
+	//	NOTES:
+	// 
+	//		1.		Null or empty output string will not update the output file name.
+	//
+
+	void	updatePileupIFN(const char* NewOutFile) {
+		if (NewOutFile == nullptr) return;
+		if (strlen(NewOutFile) == 0) return;
+		PUFN = SPool.replaceString(PUFN, NewOutFile);
+		return;
+	}
+
+	//  getMergeIFN
+	//
+	//  This function will return a pointer to the merge instrument output filename specified.
+	//
+	//	PARAMETERS:
+	//
+	//	RETURNS:
+	//
+	//		char*		-		const pointer to the specified merge instrument output file, nullptr if none
+	//
+	//	NOTES:
+	//
+
+	const char* getMergeIFN() {
+		if (MEFN == NULLSTRREF) return nullptr;
+		return SPool.getString(MEFN);
+	}
+
+	//  updateMergeIFN
+	//
+	//  This function will update the merge instrument output filename specified.
+	//
+	//	PARAMETERS:
+	//
+	//		char*		-		const pointer to the new output file name
+	//
+	//	RETURNS:
+	//
+	//	NOTES:
+	// 
+	//		1.		Null or empty output string will not update the output file name.
+	//
+
+	void	updateMergeIFN(const char* NewOutFile) {
+		if (NewOutFile == nullptr) return;
+		if (strlen(NewOutFile) == 0) return;
+		MEFN = SPool.replaceString(MEFN, NewOutFile);
+		return;
+	}
+
+	//  getInsertIFN
+	//
+	//  This function will return a pointer to the insert instrument output filename specified.
+	//
+	//	PARAMETERS:
+	//
+	//	RETURNS:
+	//
+	//		char*		-		const pointer to the specified insert instrument output file, nullptr if none
+	//
+	//	NOTES:
+	//
+
+	const char* getInsertIFN() {
+		if (ISFN == NULLSTRREF) return nullptr;
+		return SPool.getString(ISFN);
+	}
+
+	//  updateInsertIFN
+	//
+	//  This function will update the insert instrument output filename specified.
+	//
+	//	PARAMETERS:
+	//
+	//		char*		-		const pointer to the new output file name
+	//
+	//	RETURNS:
+	//
+	//	NOTES:
+	// 
+	//		1.		Null or empty output string will not update the output file name.
+	//
+
+	void	updateInsertIFN(const char* NewOutFile) {
+		if (NewOutFile == nullptr) return;
+		if (strlen(NewOutFile) == 0) return;
+		ISFN = SPool.replaceString(ISFN, NewOutFile);
+		return;
+	}
+#endif
 
 private:
 
@@ -468,6 +657,15 @@ private:
 	size_t					SKOff;												//  Sort key offset in bytes within record
 	size_t					SKLen;												//  Sort key length in bytes
 	bool					KSS;												//  Key (identical) sequence is stable
+
+	//  Conditional instrumentation package
+#ifdef   INSTRUMENTED
+	xymorg::SWITCHES		Instruments;										//  Active instruments
+	int						Interval;											//  Statistics taking interval
+	xymorg::STRREF			PUFN;												//  Pile-Up instrument output file name
+	xymorg::STRREF			MEFN;												//  Merge instrument output file name
+	xymorg::STRREF			ISFN;												//  Insert instrument output file name
+#endif
 
 	//*******************************************************************************************************************
 	//*                                                                                                                 *
@@ -536,6 +734,11 @@ private:
 
 		//  Capture the sortkey specification
 		captureSKSpec(SortNode);
+
+		//  Capture the instrumentation package configuration ONLY if enabled with the INSTRUMENTED pre-processor definition
+#ifdef INSTRUMENTED
+		captureInstrumentConfig(SortNode);
+#endif
 
 		//  Return to caller
 		return;
@@ -738,6 +941,12 @@ private:
 		//  Check max record length
 		if (MaxRecl < (16 * 1024)) MaxRecl = (16 * 1024);
 
+#ifdef INSTRUMENTED
+		//  Interval MUST be in the range 10 - 1000000
+		if (Interval < 10) Interval = 10;
+		if (Interval > 1000000) Interval = 1000000;
+#endif
+
 		if (!ConfigValid) return false;
 
 		//  Return showing valid config
@@ -807,4 +1016,56 @@ private:
 		}
 		return;
 	}
+
+#ifdef INSTRUMENTED
+
+	//  captureInstrumentConfig
+	//
+	//  This function will capture the Instrumentation package configuration (if enabled)
+	//
+	//  PARAMETERS:
+	// 
+	//		XMLIterator&		-		Reference to an XML iterator positioned to the sort section
+	// 
+	//  RETURNS:
+	//
+	//  NOTES:
+	//
+
+	void captureInstrumentConfig(xymorg::XMLMicroParser::XMLIterator& SNode) {
+		xymorg::XMLMicroParser::XMLIterator			InsNode = SNode.getScope("instruments");				//  Instrumentation section Node iterator
+
+		//  Make sure that the instruments section is valid
+		if (InsNode.isNull() || InsNode.isClosing()) return;
+
+		//  Capture the stats collection interval
+		if (InsNode.hasAttribute("interval")) {
+			Interval = InsNode.getAttributeInt("interval");
+		}
+		//  If NOT specified default to 1,000 keys interval
+		else Interval = 1000;
+
+		//
+		//  Determine if the pile-up instrument is enabled
+		//
+		PUFN = captureFilename(InsNode, "pileup");
+		if (PUFN != NULLSTRREF) Instruments = Instruments | INSTRUMENT_PILEUP;
+
+		//
+		//  Determine if the merge instrument is enabled
+		//
+		MEFN = captureFilename(InsNode, "merge");
+		if (MEFN != NULLSTRREF) Instruments = Instruments | INSTRUMENT_MERGE;
+
+		//
+		//  Determine if the insert instrument is enabled
+		//
+		ISFN = captureFilename(InsNode, "insert");
+		if (ISFN != NULLSTRREF) Instruments = Instruments | INSTRUMENT_INSERT;
+
+		// Return to caller
+		return;
+	}
+
+#endif
 };

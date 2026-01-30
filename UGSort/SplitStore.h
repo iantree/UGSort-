@@ -3,10 +3,10 @@
 //*																													*
 //*   File:       SplitStore.h																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.15.0	(Build: 16)																				*
+//*   Version:    1.17.0	(Build: 20)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2026 Ian J. Tree																				*
 //*******************************************************************************************************************
 //*																													*
 //*	This header file contains the definition for the SplitStore template class.										*
@@ -32,6 +32,7 @@
 //*	1.5.0 -		13/03/2023	-	SS3 structure changes																*
 //*	1.6.0 -		15/03/2023	-	Stable Key Handling																	*
 //*	1.15.0 -	25/08/2023	-	Binary-Chop search of Store Chain													*
+//*	1.17.0 -	28/01/2026	-	Include instrumentation package														*
 //*																													*
 //*******************************************************************************************************************/
 

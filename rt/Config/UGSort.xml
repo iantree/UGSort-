@@ -5,5 +5,12 @@
       <sortin>Data/SI250K.txt</sortin>
       <sortout>Data/SO.txt</sortout>
       <sortkey offset="0" length="20"></sortkey>
+<!--- OPTIONAL: Instrumentation Configuration -->
+      <instruments interval="10000">
+          <pileup>Stats/PU250K.csv</pileup>
+          <merge>Stats/M250K.csv</merge>
+          <insert>Stats/I250K.csv</insert>
+      </instruments>
+<!--- END: Instrumentation Configuration -->
    </sort>
 </config>

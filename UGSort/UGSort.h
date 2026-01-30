@@ -3,10 +3,10 @@
 //*																													*
 //*   File:       UGSort.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.16.2	(Build: 19)																				*
+//*   Version:    1.17.0	(Build: 20)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2026 Ian J. Tree																				*
 //*******************************************************************************************************************
 //*	UGSort																											*
 //*																													*
@@ -66,6 +66,7 @@
 //*	1.16.0 -	16/10/2023	-	Improved PM handling of Worst Case (Tail-Suppression)								*
 //*	1.16.1 -	19/10/2023	-	Increase PM timer resolution														*
 //*	1.16.2 -	18/11/2024	-	Headers sanitized for gcc 8.5														*
+//*	1.17.0 -	28/01/2026	-	Include instrumentation package														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -80,9 +81,9 @@
 #define		APP_NAME			"UGSort"
 #define		APP_TITLE			"UGSort Algorithm Testbed"
 #ifdef _DEBUG
-#define		APP_VERSION			"1.16.1 build: 18 Debug"
+#define		APP_VERSION			"1.17.0 build: 20 Debug"
 #else
-#define		APP_VERSION			"1.16.1 build: 18"
+#define		APP_VERSION			"1.17.0 build: 20"
 #endif
 
 //  Forward Declarations/ Function Prototypes

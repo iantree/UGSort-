@@ -11,7 +11,12 @@ endif()
 
 #  Old Linux Compat
 if (CMAKE_VERSION VERSION_LESS 3.19)
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -O2")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -O2")  
+endif()
+
+#  Conditional instrumentation package assertion
+if (DEFINED INSTRUMENTED)
+  add_compile_definitions(INSTRUMENTED)
 endif()
 
 #  Build and Install

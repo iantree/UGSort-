@@ -39,6 +39,15 @@
       }
     },
     {
+      "name": "x64-release-instrumented",
+      "displayName": "x64 Instrumented Release",
+      "inherits": "x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "-DINSTRUMENTED /W4 /O2"
+      }
+    },
+    {
       "name": "x86-debug",
       "displayName": "x86 Debug",
       "inherits": "windows-base",
@@ -57,6 +66,15 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_FLAGS": "/W4 /O2"
+      }
+    },
+    {
+      "name": "x86-release-instrumented",
+      "displayName": "x86 Instrumented Release",
+      "inherits": "x86-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "-DINSTRUMENTED /W4 /O2"
       }
     },
     {

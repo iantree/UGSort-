@@ -3,10 +3,10 @@
 //*																													*
 //*   File:       Sorter.h																							*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.15.0	(Build: 16)																				*
+//*   Version:    1.17.0	(Build: 20)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2026 Ian J. Tree																				*
 //*******************************************************************************************************************
 //*																													*
 //*	This header file contains the definition for the Sorter class. Objects of this class provide the driver			*
@@ -34,6 +34,7 @@
 //*	1.13.0 -	13/06/2023	-	PM Activity & T_SO sub-phase timing													*
 //*	1.14.0 -	08/07/2023	-	Remove T_SO sub-phase timing and clarify timings									*
 //*	1.15.0 -	25/08/2023	-	Binary-Chop search of Store Chain													*
+//*	1.17.0 -	28/01/2026	-	Include instrumentation package														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -180,6 +181,7 @@ public:
 	//		size_t		-		Length of the sort key
 	//		bool		-		true if the sort sequence is ascending, false if descending
 	//		bool		-		true if Preemptive Merging is enabled, false if disabled
+	//		IStats&		-		Reference to the statistics collector/reporter object 
 	//
 	//  RETURNS:
 	// 
@@ -193,7 +195,8 @@ public:
 		size_t SKOff,
 		size_t SKLen,
 		bool Ascending,
-		bool PMEnabled) {
+		bool PMEnabled,
+		IStats& Stats) {
 
 		char*					pSortin = nullptr;														//  Sort input in-memory buffer
 		char*					pSortout = nullptr;														//  Sort output in-memory buffer
@@ -204,9 +207,6 @@ public:
 
 		//  Root Splitter of the Splitter chain
 		Splitter<IMSR>* pSR = nullptr;
-
-		//  Instrumentation Statistics Object
-		IStats					Stats;
 
 		//  Load the designated sort input into memory
 		Stats.startLoading();
@@ -365,6 +365,7 @@ public:
 	//		size_t		-		Length of the sort key
 	//		bool		-		true if the sort sequence is ascending, false if descending
 	//		bool		-		true if Preemptive Merging is enabled, false if disabled
+	//		IStats&		-		Reference to the statistics collector/reporter object 
 	//
 	//  RETURNS:
 	// 
@@ -379,7 +380,8 @@ public:
 		size_t SKOff,
 		size_t SKLen,
 		bool Ascending,
-		bool PMEnabled) {
+		bool PMEnabled,
+		IStats& Stats) {
 
 		std::ifstream			Sortin;																	//  Sort input stream
 		std::ofstream			Sortout;																//  Sort output stream
@@ -388,9 +390,6 @@ public:
 
 		//  Root Splitter of the Splitter chain
 		Splitter<ODSR>* pSR = nullptr;
-
-		//  Instrumentation Statistics Object
-		IStats					Stats;
 
 		//
 		//  Setup ready for the input phase of the sort
@@ -554,6 +553,7 @@ public:
 	//		size_t		-		Length of the sort key
 	//		bool		-		true if the sort sequence is ascending, false if descending
 	//		bool		-		true if Preemptive Merging is enabled, false if disabled
+	//		IStats&		-		Reference to the statistics collector/reporter object 
 	//
 	//  RETURNS:
 	// 
@@ -567,7 +567,8 @@ public:
 		size_t SKOff,
 		size_t SKLen,
 		bool Ascending,
-		bool PMEnabled) {
+		bool PMEnabled,
+		IStats& Stats) {
 
 		char*					pSortin = nullptr;														//  Sort input in-memory buffer
 		char*					pSortout = nullptr;														//  Sort output in-memory buffer
@@ -578,9 +579,6 @@ public:
 
 		//  Root Splitter of the Splitter chain
 		Splitter<IMSR>* pSR = nullptr;
-
-		//  Instrumentation Statistics Object
-		IStats					Stats;
 
 		//  Load the designated sort input into memory
 		Stats.startLoading();
@@ -737,6 +735,7 @@ public:
 	//		size_t		-		Length of the sort key
 	//		bool		-		true if the sort sequence is ascending, false if descending
 	//		bool		-		true if Preemptive Merging is enabled, false if disabled
+	//		IStats&		-		Reference to the statistics collector/reporter object 
 	//
 	//  RETURNS:
 	// 
@@ -751,7 +750,8 @@ public:
 		size_t SKOff,
 		size_t SKLen,
 		bool Ascending,
-		bool PMEnabled) {
+		bool PMEnabled,
+		IStats& Stats) {
 
 		std::ifstream			Sortin;																	//  Sort input stream
 		std::ofstream			Sortout;																//  Sort output stream
@@ -760,9 +760,6 @@ public:
 
 		//  Root Splitter of the Splitter chain
 		Splitter<ODSR>* pSR = nullptr;
-
-		//  Instrumentation Statistics Object
-		IStats					Stats;
 
 		//
 		//  Setup ready for the input phase of the sort

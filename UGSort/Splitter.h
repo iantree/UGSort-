@@ -3,10 +3,10 @@
 //*																													*
 //*   File:       Splitter.h																						*
 //*   Suite:      Experimental Algorithms																			*
-//*   Version:    1.16.0	(Build: 17)																				*
+//*   Version:    1.17.0	(Build: 20)																				*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2026 Ian J. Tree																				*
 //*******************************************************************************************************************
 //*																													*
 //*	This header file contains the definition for the Splitter template class.										*
@@ -42,6 +42,7 @@
 //*							-	Corrected PM control parameters														*
 //*	1.15.0 -	25/08/2023	-	Binary-Chop search of Store Chain													*
 //*	1.16.0 -	16/10/2023	-	Improved PM handling of Worst Case (Tail-Suppression)								*
+//*	1.17.0 -	28/01/2026	-	Include instrumentation package														*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -512,36 +513,81 @@ public:
 
 		//  Increment the record number
 		RecNo++;
+#ifndef INSTRUMENTED
 		Stats.newKey();
+#endif
 
 		//
 		//  First check against the boundaries of the store chain
 		//
 
 		//  If the new key is equal or below the low key set a new low key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) <= 0) {
 			pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.LoHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
 		//  If the new key is equal or above the high key then set a new high key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) >= 0) {
 			pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.HiHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
 		CurrentStore = int(pStoreChain->StoreCount) - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) {
 				//  A new store must be added to the array to accomodate the key
+#ifdef INSTRUMENTED
+				Stats.NewStores++;
+				Stats.Stores++;
+#endif
 				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
 				pStoreChain->StoreCount++;
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
+#ifdef INSTRUMENTED
+					Stats.PMs++;
+#endif
 					suppressTail();
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
@@ -554,6 +600,17 @@ public:
 						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
 					}
 				}
+#ifdef INSTRUMENTED
+				//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+				if (Stats.newKey()) {
+					if (Stats.isPileUpInstrumentActive()) {
+						Stats.writePileUpLeader();
+						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						}
+					}
+				}
+#endif
 				return;
 			}
 		}
@@ -569,8 +626,14 @@ public:
 
 			//  Determine if the new key is without or within the range of the current store
 			Below = true;
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
 				Below = false;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) Without = false;
 				else Without = true;
 			}
@@ -580,7 +643,13 @@ public:
 				if (CurrentStore == 0) OtherWithout = false;
 				else {
 					//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) > 0) {
+#ifdef INSTRUMENTED
+						Stats.Compares++;
+#endif
 						if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
 						else OtherWithout = true;
 					}
@@ -590,6 +659,19 @@ public:
 				if (!OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
 					else pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -600,8 +682,14 @@ public:
 			else {
 				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
 				Below = true;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) > 0) {
 					Below = false;
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -611,6 +699,19 @@ public:
 				if (OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowKey(NewSR);
 					else pStoreChain->Store[CurrentStore + 1]->addHighKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -646,36 +747,81 @@ public:
 
 		//  Increment the record number
 		RecNo++;
+#ifndef INSTRUMENTED
 		Stats.newKey();
+#endif
 
 		//
 		//  First check against the boundaries of the store chain
 		//
 
 		//  If the new key is equal or below the low key set a new low key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) <= 0) {
 			pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.LoHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
 		//  If the new key is equal or above the high key then set a new high key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) >= 0) {
 			pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.HiHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
 		CurrentStore = int(pStoreChain->StoreCount) - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) {
 				//  A new store must be added to the array to accomodate the key
+#ifdef INSTRUMENTED
+				Stats.NewStores++;
+				Stats.Stores++;
+#endif
 				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
 				pStoreChain->StoreCount++;
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
+#ifdef INSTRUMENTED
+					Stats.PMs++;
+#endif
 					suppressTail();
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
@@ -688,6 +834,17 @@ public:
 						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
 					}
 				}
+#ifdef INSTRUMENTED
+				//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+				if (Stats.newKey()) {
+					if (Stats.isPileUpInstrumentActive()) {
+						Stats.writePileUpLeader();
+						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						}
+					}
+				}
+#endif
 				return;
 			}
 		}
@@ -703,8 +860,14 @@ public:
 
 			//  Determine if the new key is without or within the range of the current store
 			Below = true;
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) > 0) {
 				Below = false;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) Without = false;
 				else Without = true;
 			}
@@ -712,7 +875,13 @@ public:
 
 			if (Without) {
 				//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) > 0) {
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -722,6 +891,19 @@ public:
 				if (!OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
 					else pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -732,8 +914,14 @@ public:
 			else {
 				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
 				Below = true;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) > 0) {
 					Below = false;
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) < 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -743,6 +931,19 @@ public:
 				if (OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowExternalKey(NewSR);
 					else pStoreChain->Store[CurrentStore + 1]->addHighExternalKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -784,36 +985,81 @@ public:
 
 		//  Increment the record number
 		RecNo++;
+#ifndef INSTRUMENTED
 		Stats.newKey();
+#endif
 
 		//
 		//  First check against the boundaries of the store chain
 		//
 
-		//  If the new key is equal or below the low key set a new low key
+		//  If the new key is below the low key set a new low key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) < 0) {
 			pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.LoHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
-		//  If the new key is equal or above the high key then set a new high key
+		//  If the new key is above the high key then set a new high key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) > 0) {
 			pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.HiHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
 		CurrentStore = int(pStoreChain->StoreCount) - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) {
 				//  A new store must be added to the array to accomodate the key
+#ifdef INSTRUMENTED
+				Stats.NewStores++;
+				Stats.Stores++;
+#endif
 				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
 				pStoreChain->StoreCount++;
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
+#ifdef INSTRUMENTED
+					Stats.PMs++;
+#endif
 					suppressStableTail(Ascending);
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
@@ -826,6 +1072,17 @@ public:
 						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
 					}
 				}
+#ifdef INSTRUMENTED
+				//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+				if (Stats.newKey()) {
+					if (Stats.isPileUpInstrumentActive()) {
+						Stats.writePileUpLeader();
+						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						}
+					}
+				}
+#endif
 				return;
 			}
 		}
@@ -841,8 +1098,14 @@ public:
 
 			//  Determine if the new key is without or within the range of the current store
 			Below = true;
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
 				Below = false;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) Without = false;
 				else Without = true;
 			}
@@ -850,7 +1113,13 @@ public:
 
 			if (Without) {
 				//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) >= 0) {
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -860,6 +1129,19 @@ public:
 				if (!OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore]->addLowKey(NewSR);
 					else pStoreChain->Store[CurrentStore]->addHighKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -870,8 +1152,14 @@ public:
 			else {
 				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
 				Below = true;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) >= 0) {
 					Below = false;
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -881,6 +1169,19 @@ public:
 				if (OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowKey(NewSR);
 					else pStoreChain->Store[CurrentStore + 1]->addHighKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -917,36 +1218,81 @@ public:
 
 		//  Increment the record number
 		RecNo++;
+#ifndef INSTRUMENTED
 		Stats.newKey();
+#endif
 
 		//
 		//  First check against the boundaries of the store chain
 		//
 
-		//  If the new key is equal or below the low key set a new low key
+		//  If the new key is below the low key set a new low key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) < 0) {
 			pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.LoHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
-		//  If the new key is equal or above the high key then set a new high key
+		//  If the new key is above the high key then set a new high key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) > 0) {
 			pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+#ifdef INSTRUMENTED
+			Stats.HiHits++;
+			//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+			if (Stats.newKey()) {
+				if (Stats.isPileUpInstrumentActive()) {
+					Stats.writePileUpLeader();
+					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+					}
+				}
+			}
+#endif
 			return;
 		}
 
 		CurrentStore = int(pStoreChain->StoreCount) - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
+#ifdef INSTRUMENTED
+		Stats.Compares++;
+#endif
 		if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) {
 				//  A new store must be added to the array to accomodate the key
+#ifdef INSTRUMENTED
+				Stats.NewStores++;
+				Stats.Stores++;
+#endif
 				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
 				pStoreChain->StoreCount++;
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
 					//  Perform the preemptive merge
+#ifdef INSTRUMENTED
+					Stats.PMs++;
+#endif
 					suppressStableTail(Ascending);
 					//  Recompute the Maximum number of stores
 					MaxStores = computeMaxStores(MaxStores, RecNo, MaxSInc);
@@ -959,6 +1305,17 @@ public:
 						if ((pStoreChain->StoreCap - pStoreChain->StoreCount) < 10) expandStoreChain();
 					}
 				}
+#ifdef INSTRUMENTED
+				//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+				if (Stats.newKey()) {
+					if (Stats.isPileUpInstrumentActive()) {
+						Stats.writePileUpLeader();
+						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						}
+					}
+				}
+#endif
 				return;
 			}
 		}
@@ -974,8 +1331,14 @@ public:
 
 			//  Determine if the new key is without or within the range of the current store
 			Below = true;
+#ifdef INSTRUMENTED
+			Stats.Compares++;
+#endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRALo].pKey, KL) >= 0) {
 				Below = false;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) <= 0) Without = false;
 				else Without = true;
 			}
@@ -983,7 +1346,13 @@ public:
 
 			if (Without) {
 				//  Moving to the left (lower index) - Test against [CurrentStore - 1]
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRALo].pKey, KL) >= 0) {
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore - 1]->pSRA[pStoreChain->Store[CurrentStore - 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -993,6 +1362,19 @@ public:
 				if (!OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore]->addLowExternalKey(NewSR);
 					else pStoreChain->Store[CurrentStore]->addHighExternalKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -1003,8 +1385,14 @@ public:
 			else {
 				//  Moving to the right (higher index) - Test against [CurrentStore + 1]
 				Below = true;
+#ifdef INSTRUMENTED
+				Stats.Compares++;
+#endif
 				if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRALo].pKey, KL) >= 0) {
 					Below = false;
+#ifdef INSTRUMENTED
+					Stats.Compares++;
+#endif
 					if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore + 1]->pSRA[pStoreChain->Store[CurrentStore + 1]->SRAHi].pKey, KL) <= 0) OtherWithout = false;
 					else OtherWithout = true;
 				}
@@ -1014,6 +1402,19 @@ public:
 				if (OtherWithout) {
 					if (Below) pStoreChain->Store[CurrentStore + 1]->addLowExternalKey(NewSR);
 					else pStoreChain->Store[CurrentStore + 1]->addHighExternalKey(NewSR);
+#ifdef INSTRUMENTED
+					if (Below) Stats.LoHits++;
+					else Stats.HiHits++;
+					//  Increment the new key counter - if this triggered a stats reporting interval then do the pile-up reporting
+					if (Stats.newKey()) {
+						if (Stats.isPileUpInstrumentActive()) {
+							Stats.writePileUpLeader();
+							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							}
+						}
+					}
+#endif
 					return;
 				}
 
@@ -1185,6 +1586,9 @@ private:
 
 		//  Eliminate the ultimate store until the target number of stores is reached
 		while (Stores > Target) {
+#ifdef INSTRUMENTED
+			Stats.startStoreMerge(int(pStoreChain->Store[Stores - 2]->SRANum), int(pStoreChain->Store[Stores - 1]->SRANum));
+#endif
 			pStoreChain->Store[Stores - 2]->mergeNextStore(pStoreChain->Store[Stores - 1]);
 			pStoreChain->Store[Stores - 1] = nullptr;
 			Stores--;
@@ -1223,6 +1627,9 @@ private:
 
 		//  Eliminate the ultimate store until the target number of stores is reached
 		while (Stores > Target) {
+#ifdef INSTRUMENTED
+			Stats.startStoreMerge(int(pStoreChain->Store[Stores - 2]->SRANum), int(pStoreChain->Store[Stores - 1]->SRANum));
+#endif
 			if (Ascending) pStoreChain->Store[Stores - 1]->mergeNextStoreAscending(pStoreChain->Store[Stores - 1]);
 			else pStoreChain->Store[Stores - 2]->mergeNextStoreDescending(pStoreChain->Store[Stores - 1]);
 			pStoreChain->Store[Stores - 1] = nullptr;
@@ -1261,6 +1668,9 @@ private:
 
 			// Merge the following splitter into the current one
 			if (size_t(sIndex + 1) < pStoreChain->StoreCount) {
+#ifdef INSTRUMENTED
+				Stats.startStoreMerge(int(pStoreChain->Store[sIndex]->SRANum), int(pStoreChain->Store[sIndex + 1]->SRANum));
+#endif
 				pStoreChain->Store[sIndex]->mergeNextStore(pStoreChain->Store[sIndex + 1]);
 				pStoreChain->Store[sIndex + 1] = nullptr;
 				Stores--;
@@ -1304,6 +1714,9 @@ private:
 		//  Process all stores
 		while (size_t(sIndex) < pStoreChain->StoreCount) {
 
+#ifdef INSTRUMENTED
+			Stats.startStoreMerge(int(pStoreChain->Store[sIndex]->SRANum), int(pStoreChain->Store[sIndex + 1]->SRANum));
+#endif
 			// Merge the following splitter into the current one
 			if (size_t(sIndex + 1) < pStoreChain->StoreCount) {
 				if (Ascending) pStoreChain->Store[sIndex]->mergeNextStoreAscending(pStoreChain->Store[sIndex + 1]);
