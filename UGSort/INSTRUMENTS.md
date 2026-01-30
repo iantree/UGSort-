@@ -46,7 +46,7 @@ INSTRUMENTED BUILD
 For MS Visual Studio users simply select one of the available "Instrumented" build configurations, these are available for "x86 Release" and
 "x64 Release". If you wish to add additional instrumented build configurations add the appropriate section to the CMakePresets.json file adding
 -DINSTRUMENTED to the "CMAKE_CXX_FLAGS" entry.
-For command line users run the cmake step with the "-DINSTRUMENTED" option.
+For command line users run the cmake step with the -DINSTRUMENTED="TRUE" option.
 
 INSTRUMENTS CONFIGURATION
 -------------------------
