@@ -388,7 +388,7 @@ public:
 		}
 		else {
 			memset(pStoreChain, 0, (2 * sizeof(size_t)) + (4096 * sizeof(void*)));
-			pStoreChain->StoreCap = 4096; 
+			pStoreChain->StoreCap = 4096;
 			pStoreChain->Store[0] = new SplitStore<T>(IRec, KeyLen, Stats);
 			pStoreChain->StoreCount = 1;
 			Stats.newKey();
@@ -505,7 +505,7 @@ public:
 	//  
 
 	void	add(T& NewSR, bool PMEnabled) {
-		int			CurrentStore = 0;														//  Start of the Store chain
+		size_t		CurrentStore = 0;														//  Start of the Store chain
 		int			Delta = 0;																//  Delta distance for Binary Chop
 		bool		Without = false;														//  Within/Without control
 		bool		Below = false;															//  Above or below control
@@ -516,7 +516,6 @@ public:
 #ifndef INSTRUMENTED
 		Stats.newKey();
 #endif
-
 		//
 		//  First check against the boundaries of the store chain
 		//
@@ -534,7 +533,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -555,7 +554,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -563,7 +562,7 @@ public:
 			return;
 		}
 
-		CurrentStore = int(pStoreChain->StoreCount) - 1;
+		CurrentStore = pStoreChain->StoreCount - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
 #ifdef INSTRUMENTED
@@ -574,17 +573,19 @@ public:
 			Stats.Compares++;
 #endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) {
-				//  A new store must be added to the array to accomodate the key
+
 #ifdef INSTRUMENTED
 				Stats.NewStores++;
 				Stats.Stores++;
 #endif
+				//  A new store must be added to the array to accomodate the key
 				pStoreChain->Store[pStoreChain->StoreCount] = new SplitStore<T>(NewSR, KL, Stats);
 				pStoreChain->StoreCount++;
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
-					//  Perform the preemptive merge
+					//std::cout << "TRACE: Tail Suppression triggered at record: " << RecNo << ", store: " << pStoreChain->StoreCount << "." << std::endl;
+					//  Perform the preemptive merge (suppression of tail)
 #ifdef INSTRUMENTED
 					Stats.PMs++;
 #endif
@@ -606,7 +607,7 @@ public:
 					if (Stats.isPileUpInstrumentActive()) {
 						Stats.writePileUpLeader();
 						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 						}
 					}
 				}
@@ -667,7 +668,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -707,7 +708,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -739,7 +740,7 @@ public:
 	//  
 
 	void	addExternalKey(T& NewSR, bool PMEnabled) {
-		int			CurrentStore = 0;														//  Start of the Store chain
+		size_t		CurrentStore = 0;														//  Start of the Store chain
 		int			Delta = 0;																//  Delta distance for Binary Chop
 		bool		Without = false;														//  Within/Without control
 		bool		Below = false;															//  Above or below control
@@ -768,7 +769,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -789,7 +790,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -797,7 +798,7 @@ public:
 			return;
 		}
 
-		CurrentStore = int(pStoreChain->StoreCount) - 1;
+		CurrentStore = pStoreChain->StoreCount - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
 #ifdef INSTRUMENTED
@@ -808,6 +809,7 @@ public:
 			Stats.Compares++;
 #endif
 			if (memcmp(NewSR.pKey, pStoreChain->Store[CurrentStore]->pSRA[pStoreChain->Store[CurrentStore]->SRAHi].pKey, KL) < 0) {
+
 				//  A new store must be added to the array to accomodate the key
 #ifdef INSTRUMENTED
 				Stats.NewStores++;
@@ -840,7 +842,7 @@ public:
 					if (Stats.isPileUpInstrumentActive()) {
 						Stats.writePileUpLeader();
 						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 						}
 					}
 				}
@@ -899,7 +901,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -939,7 +941,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -961,7 +963,7 @@ public:
 	//  addStableKey
 	//
 	//  Adds the passed record to the Splitter Store chain, preemptive merging is ENABLED
-	//  Identical keys have their input sequence preseved
+	//  Identical keys have their input sequence preserved
 	//
 	//  PARAMETERS:
 	//
@@ -977,7 +979,7 @@ public:
 	//  
 
 	void	addStableKey(T& NewSR, bool Ascending, bool PMEnabled) {
-		int			CurrentStore = 0;														//  Start of the Store chain
+		size_t		CurrentStore = 0;														//  Start of the Store chain
 		int			Delta = 0;																//  Delta distance for Binary Chop
 		bool		Without = false;														//  Within/Without control
 		bool		Below = false;															//  Above or below control
@@ -993,7 +995,7 @@ public:
 		//  First check against the boundaries of the store chain
 		//
 
-		//  If the new key is below the low key set a new low key
+		//  If the new key is equal or below the low key set a new low key
 #ifdef INSTRUMENTED
 		Stats.Compares++;
 #endif
@@ -1006,7 +1008,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -1014,7 +1016,7 @@ public:
 			return;
 		}
 
-		//  If the new key is above the high key then set a new high key
+		//  If the new key is equal or above the high key then set a new high key
 #ifdef INSTRUMENTED
 		Stats.Compares++;
 #endif
@@ -1027,7 +1029,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -1035,7 +1037,7 @@ public:
 			return;
 		}
 
-		CurrentStore = int(pStoreChain->StoreCount) - 1;
+		CurrentStore = pStoreChain->StoreCount - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
 #ifdef INSTRUMENTED
@@ -1056,7 +1058,7 @@ public:
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
-					//  Perform the preemptive merge
+					//  Perform the preemptive merge (suppression of tail)
 #ifdef INSTRUMENTED
 					Stats.PMs++;
 #endif
@@ -1078,7 +1080,7 @@ public:
 					if (Stats.isPileUpInstrumentActive()) {
 						Stats.writePileUpLeader();
 						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 						}
 					}
 				}
@@ -1137,7 +1139,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -1177,7 +1179,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -1210,7 +1212,7 @@ public:
 	//  
 
 	void	addStableExternalKey(T& NewSR, bool Ascending, bool PMEnabled) {
-		int			CurrentStore = 0;														//  Start of the Store chain
+		size_t		CurrentStore = 0;														//  Start of the Store chain
 		int			Delta = 0;																//  Delta distance for Binary Chop
 		bool		Without = false;														//  Within/Without control
 		bool		Below = false;															//  Above or below control
@@ -1226,7 +1228,7 @@ public:
 		//  First check against the boundaries of the store chain
 		//
 
-		//  If the new key is below the low key set a new low key
+		//  If the new key is equal or below the low key set a new low key
 #ifdef INSTRUMENTED
 		Stats.Compares++;
 #endif
@@ -1239,7 +1241,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -1247,7 +1249,7 @@ public:
 			return;
 		}
 
-		//  If the new key is above the high key then set a new high key
+		//  If the new key is equal or above the high key then set a new high key
 #ifdef INSTRUMENTED
 		Stats.Compares++;
 #endif
@@ -1260,7 +1262,7 @@ public:
 				if (Stats.isPileUpInstrumentActive()) {
 					Stats.writePileUpLeader();
 					for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+						Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 					}
 				}
 			}
@@ -1268,7 +1270,7 @@ public:
 			return;
 		}
 
-		CurrentStore = int(pStoreChain->StoreCount) - 1;
+		CurrentStore = pStoreChain->StoreCount - 1;
 
 		//  If the new key is within the key range of the last store in the chain then add a new store to accomodate the key
 #ifdef INSTRUMENTED
@@ -1289,7 +1291,7 @@ public:
 
 				//  Test for trigger of a preemptive merge if the store count has exceeded the maximum
 				if (PMEnabled && (pStoreChain->StoreCount > MaxStores)) {
-					//  Perform the preemptive merge
+					//  Perform the preemptive merge (tail suppression)
 #ifdef INSTRUMENTED
 					Stats.PMs++;
 #endif
@@ -1311,7 +1313,7 @@ public:
 					if (Stats.isPileUpInstrumentActive()) {
 						Stats.writePileUpLeader();
 						for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+							Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 						}
 					}
 				}
@@ -1370,7 +1372,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}
@@ -1410,7 +1412,7 @@ public:
 						if (Stats.isPileUpInstrumentActive()) {
 							Stats.writePileUpLeader();
 							for (CurrentStore = 0; CurrentStore < pStoreChain->StoreCount; CurrentStore++) {
-								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == int(pStoreChain->StoreCount) - 1);
+								Stats.writePileUpStore(int(pStoreChain->Store[CurrentStore]->SRANum), CurrentStore == pStoreChain->StoreCount - 1);
 							}
 						}
 					}

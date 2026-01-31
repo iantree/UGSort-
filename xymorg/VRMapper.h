@@ -3,10 +3,10 @@
 //*																													*
 //*   File:       VRMapper.h																						*
 //*   Suite:      xymorg Integration																				*
-//*   Version:    1.1.0	(Build: 02)																					*
+//*   Version:    1.5.0	(Build: 05)																					*
 //*   Author:     Ian Tree/HMNL																						*
 //*																													*
-//*   Copyright 2017 - 2023 Ian J. Tree																				*
+//*   Copyright 2017 - 2025 Ian J. Tree																				*
 //*******************************************************************************************************************
 //*																													*
 //*	This header file contains the definition for the VRMapper class. The class holds the Virtual Resource Maps		*
@@ -25,6 +25,10 @@
 //*																													*
 //*	1.0.0 -		02/12/2017	-	Initial Release																		*
 //*	1.1.0 -		27/10/2022	-	MIME type resolver																	*
+//*	1.1.1 -		10/12/2024	-	Winter Cleanup																		*
+//*	1.1.2 -		18/01/2025	-	Improved sanitisation for file mapping.												*
+//* 1.5.0 -		20/04/2025  -	Pressure Hose Cleaning																*
+//*							-	Asynch link read for Linux															*
 //*																													*
 //*******************************************************************************************************************/
 
@@ -199,7 +203,7 @@ namespace xymorg {
 		//  NOTES:
 		//
 
-		bool	isFirstCLPUsed() { return CLFPUsed; }
+		bool	isFirstCLPUsed() const { return CLFPUsed; }
 
 		//  extendConfiguration
 		//
@@ -1176,6 +1180,8 @@ namespace xymorg {
 			if (szFile[0] == '\\') return true;
 			if (strlen(szFile) < 2) return false;
 			if (isalpha(szFile[0]) && szFile[1] == ':') return true;
+			//  If the file name starts with a scheme name xxx:// then treat as absolute (always)
+			if (st_stristr(szFile, "://") != nullptr) return true;
 			return false;
 		}
 
@@ -1765,16 +1771,29 @@ namespace xymorg {
 		//
 		void getExecutablePath(char* szXPath, size_t BfrSize) {
 			int			Size = 0;																	//  Returned size
-			char		szLink[64];																	//  Program file name symbolic link
+			int			Retries = 100;																//  Max retry limit
+			char		szLink[64] = {};															//  Program file name symbolic link
 
 			//  Build the symbolic link
-			sprintf_s(szLink, 64, "/proc/%d/exe", getpid());
+			//sprintf_s(szLink, 64, "/proc/%d/exe", getpid());
+			strcpy_s(szLink, 64, "/proc/self/exe");
 
 			//  Read the link
-			Size = readlink(szLink, szXPath, BfrSize);
-
+			while (Size == 0 && Retries > 0) {
+				Size = readlink(szLink, szXPath, BfrSize);
+				if (Size == 0) {
+					sleep(MILLISECONDS(5));
+					Retries--;
+				}
+			}
 			//  If we failed to get one then pass back a dummy file name that will cause a default project root to be used
-			if (Size == 0) strcpy_s(szXPath, BfrSize, "/var/xybase/Bin/application");
+			if (Size == 0) {
+				std::cerr << "ERROR: Failed to determine the executable path after 100 attempts." << std::endl;
+				strcpy_s(szXPath, BfrSize, "/var/xybase/Bin/application");
+			}
+			else {
+				if (Retries < 100) std::cerr << "WARNING: Read executable link after " << 100 - Retries << " attempts." << std::endl;
+			}
 
 			//  Return to caller
 			return;
