@@ -964,8 +964,8 @@ namespace xymorg {
 			time_t			ttNow = 0;																				//  Submission Timestamp
 			struct tm		tmLocalStore = {};																		//  Storage for local time
 			struct tm*		ptmLocal = nullptr;																		//  Local time structure
-			char			szVirtFile[MAX_PATH + 1] = {};															//  Virtual file name
-			char			szLogFile[MAX_PATH + 1] = {};															//  File name of the log file
+			char			szVirtFile[MAX_PATH + 50] = {};															//  Virtual file name
+			char			szLogFile[MAX_PATH + 50] = {};															//  File name of the log file
 
 			//  Build the formatted timestamp for the log file name
 			time(&ttNow);
