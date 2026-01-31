@@ -964,13 +964,13 @@ namespace xymorg {
 			time_t			ttNow = 0;																				//  Submission Timestamp
 			struct tm		tmLocalStore = {};																		//  Storage for local time
 			struct tm*		ptmLocal = nullptr;																		//  Local time structure
-			char			szVirtFile[MAX_PATH + 1] = {};															//  Virtual file name
-			char			szLogFile[MAX_PATH + 50] = {};															//  File name of the log file
+			char			szVirtFile[MAX_PATH + 21] = {};															//  Virtual file name
+			char			szLogFile[MAX_PATH + 1] = {};															//  File name of the log file
 
 			//  Build the formatted timestamp for the log file name
 			time(&ttNow);
 			ptmLocal = localtime_safe(&ttNow, &tmLocalStore);
-			strftime(szLogFile, MAX_PATH, USE_LOGNAME_TIMESTAMP_FMT, ptmLocal);
+			strftime(szLogFile, MAX_PATH + 1, USE_LOGNAME_TIMESTAMP_FMT, ptmLocal);
 
 			//  Format the virtual file name
 			//  Substitution Strings are :-
@@ -978,7 +978,7 @@ namespace xymorg {
 			//		The formatted timestamp (current time)
 			//		The name of the application
 			//
-			sprintf_s(szVirtFile, MAX_PATH, USE_LOGNAME_FMT, szLogFile, szApp);
+			sprintf_s(szVirtFile, MAX_PATH + 21, USE_LOGNAME_FMT, szLogFile, szApp);
 
 			//  Map the virtual file name to a real file name
 			RMap.mapFile(szVirtFile, szLogFile, MAX_PATH + 1);
